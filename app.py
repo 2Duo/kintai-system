@@ -3,7 +3,7 @@ import sqlite3
 from datetime import datetime, timedelta
 import os
 import csv
-from io import StringIO
+from io import BytesIO
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
@@ -94,6 +94,7 @@ def export_combined():
         conn.close()
         if not rows:
             return '該当データがありません'
+        
         si = StringIO()
         writer = csv.writer(si)
         writer.writerow(['日付', '時刻', '区分', '業務内容'])
@@ -103,9 +104,19 @@ def export_combined():
             time_str = dt.strftime('%H:%M')
             type_str = '出勤' if typ == 'in' else '退勤'
             writer.writerow([date_str, time_str, type_str, desc or ''])
-        si.seek(0)
-        filename = f"{name}_過去{days}日_勤怠記録.csv"
-        return send_file(si, mimetype='text/csv', as_attachment=True, download_name=filename, encoding='utf-8')
+
+        # StringIO → BytesIO に変換
+        mem = BytesIO()
+        mem.write(si.getvalue().encode('utf-8'))
+        mem.seek(0)
+
+        filename = f\"{name}_過去{days}日_勤怠記録.csv\"
+        return send_file(
+            mem,
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=filename
+        )
     files = os.listdir(EXPORT_DIR)
     files = [f for f in files if f.endswith('.csv')]
     files.sort(reverse=True)
