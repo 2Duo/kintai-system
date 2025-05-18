@@ -130,17 +130,4 @@ def export_combined():
     files = [f for f in files if f.endswith('.csv')]
     files.sort(reverse=True)
 
-    file_links = ''.join(f'<li><a href="/exports/{f}" download>{f}</a></li>' for f in files)
-    options = ''.join(f'<option value="{name}">{name}</option>' for name in user_names)
-
-    return f'''
-    <h1>CSV出力</h1>
-    <h2>定期生成済みファイル</h2>
-    <ul>{file_links}</ul>
-    <h2>任意期間のCSV生成</h2>
-    <form method="post">
-        ユーザー名: <select name="name">{options}</select><br>
-        過去何日分: <input type="number" name="days"><br>
-        <button type="submit">CSV生成してダウンロード</button>
-    </form>
-    '''
+    return render_template('export.html', files=files, user_names=user_names)
