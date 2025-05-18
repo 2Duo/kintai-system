@@ -69,10 +69,17 @@ def generate_monthly_csv(year: int, month: int):
                 writer.writerow([date_str, time_str, type_str, desc or ''])
     conn.close()
 
-@app.route('/admin/export_days', methods=['GET', 'POST'])
-def export_days():
+@app.route('/admin/export', methods=['GET', 'POST'])
+def export_combined():
     if not session.get('is_admin'):
         return 'アクセス拒否'
+
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT name FROM users ORDER BY name")
+    user_names = [row[0] for row in c.fetchall()]
+    conn.close()
+
     if request.method == 'POST':
         name = request.form['name']
         days = int(request.form['days'])
@@ -119,9 +126,20 @@ def export_days():
             encoding='utf-8'
         )
 
-    return '''
+    files = os.listdir(EXPORT_DIR)
+    files = [f for f in files if f.endswith('.csv')]
+    files.sort(reverse=True)
+
+    file_links = ''.join(f'<li><a href="/exports/{f}" download>{f}</a></li>' for f in files)
+    options = ''.join(f'<option value="{name}">{name}</option>' for name in user_names)
+
+    return f'''
+    <h1>CSV出力</h1>
+    <h2>定期生成済みファイル</h2>
+    <ul>{file_links}</ul>
+    <h2>任意期間のCSV生成</h2>
     <form method="post">
-        氏名: <input type="text" name="name"><br>
+        ユーザー名: <select name="name">{options}</select><br>
         過去何日分: <input type="number" name="days"><br>
         <button type="submit">CSV生成してダウンロード</button>
     </form>
