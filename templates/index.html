@@ -8,9 +8,8 @@
 <body>
     <div class="container">
         <h1>勤怠打刻</h1>
+        <p>ようこそ、{{ user_name }} さん</p>
         <form action="/punch" method="post">
-            <!-- 仮の氏名入力（ログイン機能後は非表示予定） -->
-            <input type="text" name="name" placeholder="氏名" required><br>
             <label for="timestamp">時刻を入力：</label>
             <input type="datetime-local" name="timestamp" id="timestamp" required><br>
             <label for="description">本日の業務内容：</label><br>
