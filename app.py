@@ -131,3 +131,6 @@ def export_combined():
     files.sort(reverse=True)
 
     return render_template('export.html', files=files, user_names=user_names)
+    
+if __name__ == '__main__':
+    app.run(debug=True)
