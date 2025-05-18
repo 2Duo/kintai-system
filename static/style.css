@@ -1,0 +1,18 @@
+body {
+    font-family: sans-serif;
+    background-color: #f4f4f4;
+    text-align: center;
+    padding-top: 50px;
+}
+.container {
+    background: white;
+    display: inline-block;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+input, button {
+    margin: 10px;
+    padding: 10px;
+    font-size: 16px;
+}
