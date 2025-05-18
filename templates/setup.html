@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>初期管理者登録</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>初期管理者アカウント作成</h1>
+        <form action="/setup" method="post">
+            <input type="text" name="name" placeholder="氏名" required><br>
+            <input type="email" name="email" placeholder="メールアドレス" required><br>
+            <input type="password" name="password" placeholder="パスワード" required><br>
+            <button type="submit">作成</button>
+        </form>
+    </div>
+</body>
+</html>
