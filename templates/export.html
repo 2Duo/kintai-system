@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>CSV出力</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>CSV出力</h1>
+
+        <h2>定期生成済みファイル</h2>
+        <ul>
+            {% for file in files %}
+                <li><a href="/exports/{{ file }}" download>{{ file }}</a></li>
+            {% endfor %}
+        </ul>
+
+        <h2>任意期間のCSV生成</h2>
+        <form method="post">
+            ユーザー名:
+            <select name="name">
+                {% for name in user_names %}
+                    <option value="{{ name }}">{{ name }}</option>
+                {% endfor %}
+            </select><br>
+            過去何日分: <input type="number" name="days" required><br>
+            <button type="submit">CSV生成してダウンロード</button>
+        </form>
+    </div>
+</body>
+</html>
