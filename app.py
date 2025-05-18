@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, session
 import sqlite3
 from datetime import datetime
 import os
@@ -14,7 +14,8 @@ c.execute('''CREATE TABLE IF NOT EXISTS attendance (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     timestamp TEXT NOT NULL,
-    type TEXT CHECK(type IN ('in','out')) NOT NULL
+    type TEXT CHECK(type IN ('in','out')) NOT NULL,
+    description TEXT
 )''')
 conn.commit()
 conn.close()
@@ -25,13 +26,14 @@ def index():
 
 @app.route('/punch', methods=['POST'])
 def punch():
-    name = request.form['name']
+    name = request.form['name']  # Placeholder until auth is implemented
     punch_type = request.form['type']  # 'in' or 'out'
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    timestamp = request.form['timestamp']  # Manual input of timestamp
+    description = request.form.get('description', '')
 
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("INSERT INTO attendance (name, timestamp, type) VALUES (?, ?, ?)", (name, timestamp, punch_type))
+    c.execute("INSERT INTO attendance (name, timestamp, type, description) VALUES (?, ?, ?, ?)", (name, timestamp, punch_type, description))
     conn.commit()
     conn.close()
 
