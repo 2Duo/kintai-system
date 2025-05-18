@@ -110,7 +110,7 @@ def export_combined():
         mem.write(si.getvalue().encode('utf-8'))
         mem.seek(0)
 
-        filename = f\"{name}_過去{days}日_勤怠記録.csv\"
+        filename = f"{name}_過去{days}日_勤怠記録.csv"
         return send_file(
             mem,
             mimetype='text/csv',
