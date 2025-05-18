@@ -61,12 +61,13 @@ def login():
         password = request.form['password']
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
-        c.execute("SELECT id, name, password_hash FROM users WHERE email = ?", (email,))
+        c.execute("SELECT id, name, password_hash, is_admin FROM users WHERE email = ?", (email,))
         user = c.fetchone()
         conn.close()
         if user and check_password_hash(user[2], password):
             session['user_id'] = user[0]
             session['user_name'] = user[1]
+            session['is_admin'] = bool(user[3])
             return redirect(url_for('index'))
         return 'ログイン失敗'
     return render_template('login.html')
@@ -75,6 +76,29 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for('login'))
+
+@app.route('/admin/create_user', methods=['GET', 'POST'])
+def create_user():
+    if not session.get('is_admin'):
+        return 'アクセス拒否'
+    if request.method == 'POST':
+        name = request.form['name']
+        email = request.form['email']
+        password = request.form['password']
+        is_admin = 1 if 'is_admin' in request.form else 0
+        password_hash = generate_password_hash(password)
+
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        try:
+            c.execute("INSERT INTO users (email, name, password_hash, is_admin) VALUES (?, ?, ?, ?)", (email, name, password_hash, is_admin))
+            conn.commit()
+        except sqlite3.IntegrityError:
+            return 'メールアドレスは既に登録されています'
+        finally:
+            conn.close()
+        return redirect(url_for('index'))
+    return render_template('create_user.html')
 
 if __name__ == '__main__':
     app.run(debug=True)
