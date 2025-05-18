@@ -12,12 +12,18 @@
             <!-- 仮の氏名入力（ログイン機能後は非表示予定） -->
             <input type="text" name="name" placeholder="氏名" required><br>
             <label for="timestamp">時刻を入力：</label>
-            <input type="datetime-local" name="timestamp" required><br>
+            <input type="datetime-local" name="timestamp" id="timestamp" required><br>
             <label for="description">本日の業務内容：</label><br>
             <textarea name="description" rows="4" cols="40" placeholder="例：出荷対応、在庫確認、会議参加など"></textarea><br>
             <button type="submit" name="type" value="in">出勤</button>
             <button type="submit" name="type" value="out">退勤</button>
         </form>
     </div>
+
+    <script>
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset()); // ローカルタイム調整
+        document.getElementById('timestamp').value = now.toISOString().slice(0,16);
+    </script>
 </body>
 </html>
