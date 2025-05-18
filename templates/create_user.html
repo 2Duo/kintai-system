@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>ユーザー作成</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>新規ユーザー作成</h1>
+        <form action="/admin/create_user" method="post">
+            <input type="text" name="name" placeholder="氏名" required><br>
+            <input type="email" name="email" placeholder="メールアドレス" required><br>
+            <input type="password" name="password" placeholder="初期パスワード" required><br>
+            <label><input type="checkbox" name="is_admin"> 管理者権限を付与</label><br>
+            <button type="submit">ユーザー作成</button>
+        </form>
+    </div>
+</body>
+</html>
