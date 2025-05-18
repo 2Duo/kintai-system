@@ -100,5 +100,26 @@ def create_user():
         return redirect(url_for('index'))
     return render_template('create_user.html')
 
+@app.route('/setup', methods=['GET', 'POST'])
+def setup():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM users")
+    count = c.fetchone()[0]
+    if count > 0:
+        conn.close()
+        return redirect(url_for('login'))
+    if request.method == 'POST':
+        name = request.form['name']
+        email = request.form['email']
+        password = request.form['password']
+        password_hash = generate_password_hash(password)
+        c.execute("INSERT INTO users (email, name, password_hash, is_admin) VALUES (?, ?, ?, 1)", (email, name, password_hash))
+        conn.commit()
+        conn.close()
+        return redirect(url_for('login'))
+    conn.close()
+    return render_template('setup.html')
+
 if __name__ == '__main__':
     app.run(debug=True)
