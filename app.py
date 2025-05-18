@@ -2,42 +2,79 @@ from flask import Flask, render_template, request, redirect, url_for, session
 import sqlite3
 from datetime import datetime
 import os
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
+app.secret_key = 'your_secret_key_here'  # セッション管理に必要
+
 DB_PATH = os.path.join(os.path.dirname(__file__), 'database', 'kintai.db')
 
 # Ensure DB exists
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 conn = sqlite3.connect(DB_PATH)
 c = conn.cursor()
+c.execute('''CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    is_admin INTEGER DEFAULT 0
+)''')
 c.execute('''CREATE TABLE IF NOT EXISTS attendance (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
     timestamp TEXT NOT NULL,
     type TEXT CHECK(type IN ('in','out')) NOT NULL,
-    description TEXT
+    description TEXT,
+    FOREIGN KEY(user_id) REFERENCES users(id)
 )''')
 conn.commit()
 conn.close()
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    return render_template('index.html', user_name=session['user_name'])
 
 @app.route('/punch', methods=['POST'])
 def punch():
-    name = request.form['name']  # Placeholder until auth is implemented
-    punch_type = request.form['type']  # 'in' or 'out'
-    timestamp = request.form['timestamp']  # Manual input of timestamp
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    user_id = session['user_id']
+    timestamp = request.form['timestamp']
+    punch_type = request.form['type']
     description = request.form.get('description', '')
 
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("INSERT INTO attendance (name, timestamp, type, description) VALUES (?, ?, ?, ?)", (name, timestamp, punch_type, description))
+    c.execute("INSERT INTO attendance (user_id, timestamp, type, description) VALUES (?, ?, ?, ?)", (user_id, timestamp, punch_type, description))
     conn.commit()
     conn.close()
 
     return redirect(url_for('index'))
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        email = request.form['email']
+        password = request.form['password']
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT id, name, password_hash FROM users WHERE email = ?", (email,))
+        user = c.fetchone()
+        conn.close()
+        if user and check_password_hash(user[2], password):
+            session['user_id'] = user[0]
+            session['user_name'] = user[1]
+            return redirect(url_for('index'))
+        return 'ログイン失敗'
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
 
 if __name__ == '__main__':
     app.run(debug=True)
