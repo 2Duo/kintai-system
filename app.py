@@ -3,8 +3,7 @@ import sqlite3
 from datetime import datetime, timedelta
 import os
 import csv
-from io import StringIO
-from io import BytesIO
+from io import StringIO, BytesIO
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
@@ -53,7 +52,7 @@ def generate_monthly_csv(year: int, month: int):
             continue
         filename = f"{name}_{year}_{month:02d}_勤怠記録.csv"
         filepath = os.path.join(EXPORT_DIR, filename)
-        with open(filepath, 'w', newline='', encoding='utf-8') as f:
+        with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
             writer = csv.writer(f)
             writer.writerow(['日付', '時刻', '区分', '業務内容'])
             for ts, typ, desc in rows:
@@ -95,7 +94,6 @@ def export_combined():
         conn.close()
         if not rows:
             return '該当データがありません'
-        
         si = StringIO()
         writer = csv.writer(si)
         writer.writerow(['日付', '時刻', '区分', '業務内容'])
@@ -105,19 +103,11 @@ def export_combined():
             time_str = dt.strftime('%H:%M')
             type_str = '出勤' if typ == 'in' else '退勤'
             writer.writerow([date_str, time_str, type_str, desc or ''])
-
-        # StringIO → BytesIO に変換
         mem = BytesIO()
-        mem.write(si.getvalue().encode('utf-8'))
+        mem.write(si.getvalue().encode('utf-8-sig'))
         mem.seek(0)
-
         filename = f"{name}_過去{days}日_勤怠記録.csv"
-        return send_file(
-            mem,
-            mimetype='text/csv',
-            as_attachment=True,
-            download_name=filename
-        )
+        return send_file(mem, mimetype='text/csv', as_attachment=True, download_name=filename)
     files = os.listdir(EXPORT_DIR)
     files = [f for f in files if f.endswith('.csv')]
     files.sort(reverse=True)
