@@ -72,7 +72,13 @@ def export_combined():
     c.execute("SELECT name FROM users ORDER BY name")
     user_names = [row[0] for row in c.fetchall()]
     conn.close()
+
     if request.method == 'POST':
+        if request.form.get('action') == 'generate_csv_now':
+            now = datetime.now()
+            generate_monthly_csv(now.year, now.month)
+            return redirect(url_for('export_combined'))
+
         name = request.form['name']
         days = int(request.form['days'])
         end = datetime.now()
@@ -108,6 +114,7 @@ def export_combined():
         mem.seek(0)
         filename = f"{name}_過去{days}日_勤怠記録.csv"
         return send_file(mem, mimetype='text/csv', as_attachment=True, download_name=filename)
+
     files = os.listdir(EXPORT_DIR)
     files = [f for f in files if f.endswith('.csv')]
     files.sort(reverse=True)
