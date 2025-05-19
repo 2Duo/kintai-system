@@ -7,6 +7,9 @@
 </head>
 <body>
     <div class="container">
+        <div style="text-align: right;">
+            <a href="{{ url_for('logout') }}">ログアウト</a>
+        </div>
         <h1>新規ユーザー作成</h1>
         <form action="/admin/create_user" method="post">
             <input type="text" name="name" placeholder="氏名" required><br>
