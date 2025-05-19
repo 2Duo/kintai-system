@@ -120,6 +120,66 @@ def export_combined():
     files.sort(reverse=True)
     return render_template('export.html', files=files, user_names=user_names)
 
+@app.route('/my/import', methods=['POST'])
+def import_csv():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    user_id = session['user_id']
+    uploaded_file = request.files['file']
+    if not uploaded_file or not uploaded_file.filename.endswith('.csv'):
+        return 'CSVファイルを選択してください'
+
+    import csv
+    from collections import defaultdict
+    from io import TextIOWrapper
+    import tempfile
+
+    # 既存データ読み込み
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT timestamp, type, description FROM attendance WHERE user_id = ?", (user_id,))
+    existing = defaultdict(dict)
+    for ts, typ, desc in c.fetchall():
+        day = ts[:10]  # YYYY-MM-DD
+        existing[day][typ] = (ts, desc)
+
+    # 一時保存とパース
+    temp_csv = TextIOWrapper(uploaded_file.stream, encoding='utf-8-sig')
+    reader = csv.DictReader(temp_csv)
+    incoming = defaultdict(dict)
+    for row in reader:
+        day = row['日付']
+        if row.get('出勤'):
+            incoming[day]['in'] = (f"{day}T{row['出勤']}:00", row.get('業務内容', ''))
+        if row.get('退勤'):
+            incoming[day]['out'] = (f"{day}T{row['退勤']}:00", row.get('業務内容', ''))
+
+    # 衝突データ検出
+    conflicts = []
+    for day in incoming:
+        for typ in incoming[day]:
+            if typ in existing.get(day, {}):
+                conflicts.append({
+                    'day': day,
+                    'type': typ,
+                    'existing': existing[day][typ],
+                    'incoming': incoming[day][typ]
+                })
+
+    # 衝突がなければ直接挿入
+    if not conflicts:
+        for day in incoming:
+            for typ, (ts, desc) in incoming[day].items():
+                c.execute("DELETE FROM attendance WHERE user_id = ? AND type = ? AND substr(timestamp, 1, 10) = ?", (user_id, typ, day))
+                c.execute("INSERT INTO attendance (user_id, timestamp, type, description) VALUES (?, ?, ?, ?)", (user_id, ts, typ, desc))
+        conn.commit()
+        conn.close()
+        return redirect(url_for('index'))
+
+    # 衝突データをテンプレートへ渡す
+    conn.close()
+    return render_template('resolve_conflicts.html', conflicts=conflicts, incoming=incoming, user_id=user_id)
+
 @app.route('/')
 def index():
     if 'user_id' not in session:
