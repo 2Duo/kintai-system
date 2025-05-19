@@ -157,7 +157,65 @@ def export_combined():
     files.sort(reverse=True)
     return render_template('export.html', files=files, user_names=user_names)
 
-@app.route('/my/import', methods=['POST'])
+@app.route('/punch', methods=['POST'])
+def punch():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    user_id = session['user_id']
+    timestamp = request.form['timestamp']
+    punch_type = request.form['type']
+    description = request.form.get('description', '')
+
+    day = timestamp[:10]  # YYYY-MM-DD
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+
+    c.execute("""
+        SELECT timestamp, description FROM attendance 
+        WHERE user_id = ? AND type = ? AND substr(timestamp, 1, 10) = ?
+    """, (user_id, punch_type, day))
+    existing = c.fetchone()
+    conn.close()
+
+    if existing:
+        return render_template('confirm_punch.html', existing={
+        'timestamp': existing[0], 'description': existing[1]
+    }, incoming={
+        'timestamp': timestamp, 'description': description
+    }, punch_type=punch_type, day=day, referer=request.referrer or url_for('index'))
+
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT INTO attendance (user_id, timestamp, type, description) VALUES (?, ?, ?, ?)",
+              (user_id, timestamp, punch_type, description))
+    conn.commit()
+    conn.close()
+    referer = request.form.get('referer', url_for('index'))
+    return redirect(referer)
+
+@app.route('/punch/resolve', methods=['POST'])
+def resolve_punch():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    user_id = session['user_id']
+    action = request.form['action']
+    day = request.form['day']
+    punch_type = request.form['type']
+    timestamp = request.form['timestamp']
+    description = request.form.get('description', '')
+
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+
+    if action == 'overwrite':
+        c.execute("DELETE FROM attendance WHERE user_id = ? AND type = ? AND substr(timestamp, 1, 10) = ?",
+                  (user_id, punch_type, day))
+        c.execute("INSERT INTO attendance (user_id, timestamp, type, description) VALUES (?, ?, ?, ?)",
+                  (user_id, timestamp, punch_type, description))
+        conn.commit()
+    conn.close()
+    return redirect(url_for('index'))
+
 @app.route('/exports/<filename>')
 def download_export_file(filename):
     if not session.get('is_admin'):
@@ -167,6 +225,7 @@ def download_export_file(filename):
         return 'ファイルが存在しません'
     return send_file(filepath, as_attachment=True, mimetype='text/csv')
 
+@app.route('/my/import', methods=['POST'])
 def import_csv():
     if 'user_id' not in session:
         return redirect(url_for('login'))
@@ -229,7 +288,7 @@ def import_csv():
         return redirect(url_for('view_my_logs'))
 
     conn.close()
-    return render_template('resolve_conflicts.html', conflicts=conflicts, incoming=incoming, user_id=user_id)
+    return render_template('resolve_conflicts.html', conflicts=conflicts, incoming=incoming, user_id=user_id, referer=request.referrer or url_for('view_my_logs'))
 
 @app.route('/my/import/resolve', methods=['POST'])
 def resolve_conflicts():
@@ -250,7 +309,8 @@ def resolve_conflicts():
                 c.execute("INSERT INTO attendance (user_id, timestamp, type, description) VALUES (?, ?, ?, ?)", (user_id, ts, typ, desc))
     conn.commit()
     conn.close()
-    return redirect(url_for('index'))
+    referer = request.form.get('referer', url_for('view_my_logs'))
+    return redirect(referer)                    
 
 @app.route('/my/logs')
 def view_my_logs():
@@ -288,21 +348,6 @@ def index():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     return render_template('index.html', user_name=session['user_name'])
-
-@app.route('/punch', methods=['POST'])
-def punch():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    user_id = session['user_id']
-    timestamp = request.form['timestamp']
-    punch_type = request.form['type']
-    description = request.form.get('description', '')
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT INTO attendance (user_id, timestamp, type, description) VALUES (?, ?, ?, ?)", (user_id, timestamp, punch_type, description))
-    conn.commit()
-    conn.close()
-    return redirect(url_for('index'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>打刻確認</title>
+</head>
+<body>
+    <h2>既存の打刻データがあります</h2>
+    <p>以下の打刻情報がすでに存在しています。同じ日の同じ区分（{{ '出勤' if punch_type == 'in' else '退勤' }})に複数の記録はできません。</p>
+
+    <table border="1">
+        <tr>
+            <th>項目</th>
+            <th>既存の記録</th>
+            <th>今回の入力</th>
+        </tr>
+        <tr>
+            <td>時刻</td>
+            <td>{{ existing.timestamp[11:16] }}</td>
+            <td>{{ incoming.timestamp[11:16] }}</td>
+        </tr>
+        <tr>
+            <td>業務内容</td>
+            <td>{{ existing.description or '（なし）' }}</td>
+            <td>{{ incoming.description or '（なし）' }}</td>
+        </tr>
+    </table>
+
+    <form action="{{ url_for('resolve_punch') }}" method="post">
+        <input type="hidden" name="timestamp" value="{{ incoming.timestamp }}">
+        <input type="hidden" name="description" value="{{ incoming.description }}">
+        <input type="hidden" name="type" value="{{ punch_type }}">
+        <input type="hidden" name="day" value="{{ day }}">
+        <input type="hidden" name="referer" value="{{ referer }}">
+        <button type="submit" name="action" value="overwrite">新しい記録で上書き</button>
+        <button type="submit" name="action" value="keep">既存のままにする</button>
+    </form>
+</body>
+</html>

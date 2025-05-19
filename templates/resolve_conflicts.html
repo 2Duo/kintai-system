@@ -2,36 +2,44 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>CSV衝突解決</title>
+    <title>CSVインポート確認</title>
 </head>
 <body>
-    <h1>CSVからのインポート - 衝突の解決</h1>
-    <form method="post" action="{{ url_for('resolve_conflicts') }}">
+    <h2>CSVインポートの確認</h2>
+    <p>以下のデータは既に存在する記録と衝突しています。どちらを保持するか選択してください。</p>
+
+    <form method="POST" action="{{ url_for('resolve_conflicts') }}">
+        <input type="hidden" name="user_id" value="{{ user_id }}">
+        <input type="hidden" name="referer" value="{{ referer }}">
+
         <table border="1">
             <tr>
                 <th>日付</th>
                 <th>区分</th>
-                <th>既存の時刻</th>
-                <th>CSVの時刻</th>
-                <th>選択</th>
+                <th>既存の記録</th>
+                <th>新しい記録</th>
+                <th>使用する記録</th>
             </tr>
-            {% for item in conflicts %}
+            {% for conflict in conflicts %}
             <tr>
-                <td>{{ item.day }}</td>
-                <td>{{ '出勤' if item.type == 'in' else '退勤' }}</td>
-                <td>{{ item.existing[0][11:16] }}<br>{{ item.existing[1] }}</td>
-                <td>{{ item.incoming[0][11:16] }}<br>{{ item.incoming[1] }}</td>
+                <td>{{ conflict.day }}</td>
+                <td>{{ '出勤' if conflict.type == 'in' else '退勤' }}</td>
+                <td>{{ conflict.existing[0][11:16] }} / {{ conflict.existing[1] or '（なし）' }}</td>
+                <td>{{ conflict.incoming[0][11:16] }} / {{ conflict.incoming[1] or '（なし）' }}</td>
                 <td>
-                    <label><input type="radio" name="choice_{{ item.day }}_{{ item.type }}" value="existing" checked>既存</label>
-                    <label><input type="radio" name="choice_{{ item.day }}_{{ item.type }}" value="incoming">CSV</label>
-                    <input type="hidden" name="incoming_ts_{{ item.day }}_{{ item.type }}" value="{{ item.incoming[0] }}">
-                    <input type="hidden" name="incoming_desc_{{ item.day }}_{{ item.type }}" value="{{ item.incoming[1] }}">
+                    <label>
+                        <input type="radio" name="{{ conflict.day }}_{{ conflict.type }}" value="existing" checked> 既存
+                    </label>
+                    <label>
+                        <input type="radio" name="{{ conflict.day }}_{{ conflict.type }}" value="incoming"> 新規
+                    </label>
                 </td>
             </tr>
             {% endfor %}
         </table>
+
         <br>
-        <button type="submit">選択に従って反映する</button>
+        <button type="submit">選択内容で保存</button>
     </form>
 </body>
 </html>
