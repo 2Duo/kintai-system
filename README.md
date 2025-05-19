@@ -6,7 +6,7 @@
 ## セットアップ方法
 
 ```bash
-git clone https://github.com/your-username/kintai-system.git
+git clone https://github.com/2Duo/kintai-system.git
 cd kintai-system
 python3 -m venv venv
 source venv/bin/activate
