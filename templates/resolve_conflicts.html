@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>CSV衝突解決</title>
+</head>
+<body>
+    <h1>CSVからのインポート - 衝突の解決</h1>
+    <form method="post" action="{{ url_for('resolve_conflicts') }}">
+        <table border="1">
+            <tr>
+                <th>日付</th>
+                <th>区分</th>
+                <th>既存の時刻</th>
+                <th>CSVの時刻</th>
+                <th>選択</th>
+            </tr>
+            {% for item in conflicts %}
+            <tr>
+                <td>{{ item.day }}</td>
+                <td>{{ '出勤' if item.type == 'in' else '退勤' }}</td>
+                <td>{{ item.existing[0][11:16] }}<br>{{ item.existing[1] }}</td>
+                <td>{{ item.incoming[0][11:16] }}<br>{{ item.incoming[1] }}</td>
+                <td>
+                    <label><input type="radio" name="choice_{{ item.day }}_{{ item.type }}" value="existing" checked>既存</label>
+                    <label><input type="radio" name="choice_{{ item.day }}_{{ item.type }}" value="incoming">CSV</label>
+                    <input type="hidden" name="incoming_ts_{{ item.day }}_{{ item.type }}" value="{{ item.incoming[0] }}">
+                    <input type="hidden" name="incoming_desc_{{ item.day }}_{{ item.type }}" value="{{ item.incoming[1] }}">
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+        <br>
+        <button type="submit">選択に従って反映する</button>
+    </form>
+</body>
+</html>
