@@ -7,6 +7,9 @@
 </head>
 <body>
     <div class="container">
+        <div style="text-align: right;">
+            <a href="{{ url_for('logout') }}">ログアウト</a>
+        </div>
         <h1>CSV出力</h1>
 
         <h2>定期生成済みファイル</h2>
@@ -18,14 +21,23 @@
 
         <h2>任意期間のCSV生成</h2>
         <form method="post">
-            ユーザー名:
-            <select name="name">
-                {% for name in user_names %}
-                    <option value="{{ name }}">{{ name }}</option>
-                {% endfor %}
-            </select><br>
-            過去何日分: <input type="number" name="days" required><br>
+            <label>ユーザー名:
+                <select name="name">
+                    {% for name in user_names %}
+                        <option value="{{ name }}">{{ name }}</option>
+                    {% endfor %}
+                </select>
+            </label><br>
+            <label>過去何日分:
+                <input type="number" name="days" required>
+            </label><br>
             <button type="submit">CSV生成してダウンロード</button>
+        </form>
+
+        <h2>今月分のCSVを手動で一括生成</h2>
+        <form method="post">
+            <input type="hidden" name="action" value="generate_csv_now">
+            <button type="submit">今月分のCSVをすぐ生成</button>
         </form>
     </div>
 </body>
