@@ -16,6 +16,8 @@
         {% if session.get('is_admin') %}
         <li class="nav-item"><a class="nav-link" href="{{ url_for('export_combined') }}">CSV管理</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('create_user') }}">ユーザー作成</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('list_users') }}">ユーザー管理</a></li>
+
         {% endif %}
       </ul>
       {% if session.get('user_id') %}

@@ -372,7 +372,18 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-@app.route('/admin/create_user', methods=['GET', 'POST'])
+@app.route('/admin/users')
+def list_users():
+    if not session.get('is_admin'):
+        return 'アクセス拒否'
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id, name, email, is_admin FROM users ORDER BY name")
+    users = c.fetchall()
+    conn.close()
+    return render_template('admin_users.html', users=users)
+
+@app.route('/admin/users/create', methods=['GET', 'POST'])
 def create_user():
     if not session.get('is_admin'):
         return 'アクセス拒否'
@@ -380,19 +391,50 @@ def create_user():
         name = request.form['name']
         email = request.form['email']
         password = request.form['password']
-        is_admin = 1 if 'is_admin' in request.form else 0
+        is_admin = int('is_admin' in request.form)
         password_hash = generate_password_hash(password)
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         try:
-            c.execute("INSERT INTO users (email, name, password_hash, is_admin) VALUES (?, ?, ?, ?)", (email, name, password_hash, is_admin))
+            c.execute("INSERT INTO users (name, email, password_hash, is_admin) VALUES (?, ?, ?, ?)",
+                      (name, email, password_hash, is_admin))
             conn.commit()
         except sqlite3.IntegrityError:
-            return 'メールアドレスは既に登録されています'
-        finally:
             conn.close()
-        return redirect(url_for('index'))
+            return 'メールアドレスが既に登録されています'
+        conn.close()
+        return redirect(url_for('list_users'))
     return render_template('create_user.html')
+
+@app.route('/admin/users/edit/<int:user_id>', methods=['GET', 'POST'])
+def edit_user(user_id):
+    if not session.get('is_admin'):
+        return 'アクセス拒否'
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    if request.method == 'POST':
+        name = request.form['name']
+        email = request.form['email']
+        is_admin = int('is_admin' in request.form)
+        c.execute("UPDATE users SET name = ?, email = ?, is_admin = ? WHERE id = ?", (name, email, is_admin, user_id))
+        conn.commit()
+        conn.close()
+        return redirect(url_for('list_users'))
+    c.execute("SELECT name, email, is_admin FROM users WHERE id = ?", (user_id,))
+    user = c.fetchone()
+    conn.close()
+    return render_template('edit_user.html', user_id=user_id, user=user)
+
+@app.route('/admin/users/delete/<int:user_id>', methods=['POST'])
+def delete_user(user_id):
+    if not session.get('is_admin'):
+        return 'アクセス拒否'
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('list_users'))
 
 @app.route('/setup', methods=['GET', 'POST'])
 def setup():
