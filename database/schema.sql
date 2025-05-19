@@ -8,6 +8,15 @@ CREATE TABLE IF NOT EXISTS users (
     overtime_threshold TEXT DEFAULT '18:00'
 );
 
+-- 管理下にするユーザー
+CREATE TABLE IF NOT EXISTS admin_managed_users (
+    admin_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    PRIMARY KEY (admin_id, user_id),
+    FOREIGN KEY (admin_id) REFERENCES users(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
 -- 勤怠記録テーブル
 CREATE TABLE IF NOT EXISTS attendance (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

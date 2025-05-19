@@ -21,13 +21,13 @@
       <tr>
         <td>{{ conflict.day }}</td>
         <td>{{ '出勤' if conflict.type == 'in' else '退勤' }}</td>
-        <td>{{ conflict.existing[0][11:16] }} / {{ conflict.existing[1] }}</td>
+        <td>{{ conflict.existing[0][11:16] }}</td>
         <td>{{ conflict.incoming[0][11:16] }} / {{ conflict.incoming[1] }}</td>
         <td>
-          <input type="radio" name="{{ conflict.day }}_{{ conflict.type }}" value="existing" checked> 既存<br>
-          <input type="radio" name="{{ conflict.day }}_{{ conflict.type }}" value="incoming"> 新規
-          <input type="hidden" name="{{ conflict.day }}_{{ conflict.type }}_incoming_ts" value="{{ conflict.incoming[0] }}">
-          <input type="hidden" name="{{ conflict.day }}_{{ conflict.type }}_incoming_desc" value="{{ conflict.incoming[1] }}">
+          <input type="radio" name="choice_{{ conflict.day }}_{{ conflict.type }}" value="existing" checked> 既存<br>
+          <input type="radio" name="choice_{{ conflict.day }}_{{ conflict.type }}" value="incoming"> 新規
+          <input type="hidden" name="incoming_ts_{{ conflict.day }}_{{ conflict.type }}" value="{{ conflict.incoming[0] }}">
+          <input type="hidden" name="incoming_desc_{{ conflict.day }}_{{ conflict.type }}" value="{{ conflict.incoming[1] }}">
         </td>
       </tr>
       {% endfor %}

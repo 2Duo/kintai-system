@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block title %}勤怠編集{% endblock %}
+
+{% block content %}
+<h2>{{ date }} の勤怠を編集</h2>
+<form method="POST">
+  <div class="mb-3">
+    <label class="form-label">出勤時刻</label>
+    <input type="time" class="form-control" name="in_time" value="{{ in_time }}">
+  </div>
+  <div class="mb-3">
+    <label class="form-label">退勤時刻</label>
+    <input type="time" class="form-control" name="out_time" value="{{ out_time }}">
+  </div>
+  <div class="mb-3">
+    <label class="form-label">業務内容</label>
+    <textarea name="description" class="form-control" rows="3">{{ description }}</textarea>
+  </div>
+  <button type="submit" class="btn btn-success">保存</button>
+  <a href="{{ url_for('view_my_logs') }}" class="btn btn-secondary">戻る</a>
+</form>
+{% endblock %}
