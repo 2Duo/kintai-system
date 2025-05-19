@@ -28,7 +28,8 @@
 kintai-system/
 ├── app.py
 ├── database/
-│   └── kintai.db
+│   ├── kintai.db
+│   └── schema.sql
 ├── exports/
 │   └── *.csv（自動生成されたCSV）
 ├── templates/
@@ -38,7 +39,6 @@ kintai-system/
 │   └── ...（他の画面）
 ├── static/
 │   └── style.css
-├── schema.sql
 └── README.md
 ```
 
