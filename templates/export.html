@@ -15,7 +15,7 @@
         <h2>定期生成済みファイル</h2>
         <ul>
             {% for file in files %}
-                <li><a href="/exports/{{ file }}" download>{{ file }}</a></li>
+                <li><a href="{{ url_for('download_export_file', filename=file) }}">{{ file }}</a></li>
             {% endfor %}
         </ul>
 

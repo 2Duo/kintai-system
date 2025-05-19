@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>自分の勤怠記録</title>
+</head>
+<body>
+    <h1>自分の勤怠記録</h1>
+    <table border="1">
+        <tr>
+            <th>日付</th>
+            <th>出勤</th>
+            <th>退勤</th>
+            <th>業務内容</th>
+        </tr>
+        {% for day, record in logs.items() %}
+        <tr>
+            <td>{{ day }}</td>
+            <td>
+                {% if record.in %}
+                    {{ record.in.time }}
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td>
+                {% if record.out %}
+                    {{ record.out.time }}
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td>
+                {% if record.out and record.out.description %}
+                    {{ record.out.description }}
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <h2>CSVから勤怠データをインポート</h2>
+    <form method="post" action="/my/import" enctype="multipart/form-data">
+        <input type="file" name="file" accept=".csv" required>
+        <button type="submit">アップロードして反映</button>
+    </form>
+
+    <div style="margin-top: 20px;">
+        <a href="{{ url_for('logout') }}">ログアウト</a>
+    </div>
+</body>
+</html>

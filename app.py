@@ -3,8 +3,10 @@ import sqlite3
 from datetime import datetime, timedelta
 import os
 import csv
-from io import StringIO, BytesIO
+from io import StringIO, BytesIO, TextIOWrapper
 from werkzeug.security import generate_password_hash, check_password_hash
+from collections import defaultdict
+
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key_here'
@@ -50,17 +52,35 @@ def generate_monthly_csv(year: int, month: int):
         rows = c.fetchall()
         if not rows:
             continue
+        daily_data = defaultdict(lambda: {'in': None, 'out': None, 'description': ''})
+        for ts, typ, desc in rows:
+            try:
+                dt = datetime.fromisoformat(ts)
+            except ValueError:
+                parts = ts.split('T')
+                if len(parts) == 2:
+                    date_part, time_part = parts
+                    if len(time_part.split(':')[0]) == 1:
+                        time_part = '0' + time_part
+                        ts = f"{date_part}T{time_part}"
+                dt = datetime.fromisoformat(ts)
+            day = dt.strftime('%Y/%m/%d')
+            time = dt.strftime('%H:%M')
+            if typ == 'in':
+                daily_data[day]['in'] = time
+            elif typ == 'out':
+                daily_data[day]['out'] = time
+            if typ == 'out' and desc:
+                daily_data[day]['description'] = desc
+
         filename = f"{name}_{year}_{month:02d}_勤怠記録.csv"
         filepath = os.path.join(EXPORT_DIR, filename)
         with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
             writer = csv.writer(f)
-            writer.writerow(['日付', '時刻', '区分', '業務内容'])
-            for ts, typ, desc in rows:
-                dt = datetime.fromisoformat(ts)
-                date_str = dt.strftime('%Y-%m-%d')
-                time_str = dt.strftime('%H:%M')
-                type_str = '出勤' if typ == 'in' else '退勤'
-                writer.writerow([date_str, time_str, type_str, desc or ''])
+            writer.writerow(['日付', '出勤時刻', '退勤時刻', '業務内容'])
+            for day in sorted(daily_data):
+                data = daily_data[day]
+                writer.writerow([day, data['in'] or '', data['out'] or '', data['description']])
     conn.close()
 
 @app.route('/admin/export', methods=['GET', 'POST'])
@@ -102,13 +122,30 @@ def export_combined():
             return '該当データがありません'
         si = StringIO()
         writer = csv.writer(si)
-        writer.writerow(['日付', '時刻', '区分', '業務内容'])
+        writer.writerow(['日付', '出勤時刻', '退勤時刻', '業務内容'])
+        daily_data = defaultdict(lambda: {'in': '', 'out': '', 'description': ''})
         for ts, typ, desc in rows:
-            dt = datetime.fromisoformat(ts)
-            date_str = dt.strftime('%Y-%m-%d')
-            time_str = dt.strftime('%H:%M')
-            type_str = '出勤' if typ == 'in' else '退勤'
-            writer.writerow([date_str, time_str, type_str, desc or ''])
+            try:
+                dt = datetime.fromisoformat(ts)
+            except ValueError:
+                parts = ts.split('T')
+                if len(parts) == 2:
+                    date_part, time_part = parts
+                    if len(time_part.split(':')[0]) == 1:
+                        time_part = '0' + time_part
+                        ts = f"{date_part}T{time_part}"
+                dt = datetime.fromisoformat(ts)
+            day = dt.strftime('%Y/%m/%d')
+            time = dt.strftime('%H:%M')
+            if typ == 'in':
+                daily_data[day]['in'] = time
+            elif typ == 'out':
+                daily_data[day]['out'] = time
+            if desc:
+                daily_data[day]['description'] = desc
+        for day in sorted(daily_data):
+            data = daily_data[day]
+            writer.writerow([day, data['in'], data['out'], data['description']])
         mem = BytesIO()
         mem.write(si.getvalue().encode('utf-8-sig'))
         mem.seek(0)
@@ -121,6 +158,15 @@ def export_combined():
     return render_template('export.html', files=files, user_names=user_names)
 
 @app.route('/my/import', methods=['POST'])
+@app.route('/exports/<filename>')
+def download_export_file(filename):
+    if not session.get('is_admin'):
+        return 'アクセス拒否'
+    filepath = os.path.join(EXPORT_DIR, filename)
+    if not os.path.isfile(filepath):
+        return 'ファイルが存在しません'
+    return send_file(filepath, as_attachment=True, mimetype='text/csv')
+
 def import_csv():
     if 'user_id' not in session:
         return redirect(url_for('login'))
@@ -129,32 +175,37 @@ def import_csv():
     if not uploaded_file or not uploaded_file.filename.endswith('.csv'):
         return 'CSVファイルを選択してください'
 
-    import csv
-    from collections import defaultdict
-    from io import TextIOWrapper
-    import tempfile
-
-    # 既存データ読み込み
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
+
+    # 既存データ読み込み
     c.execute("SELECT timestamp, type, description FROM attendance WHERE user_id = ?", (user_id,))
     existing = defaultdict(dict)
     for ts, typ, desc in c.fetchall():
-        day = ts[:10]  # YYYY-MM-DD
+        try:
+            dt = datetime.fromisoformat(ts)
+        except ValueError:
+            parts = ts.split('T')
+            if len(parts) == 2:
+                date_part, time_part = parts
+                if len(time_part.split(':')[0]) == 1:
+                    time_part = '0' + time_part
+                    ts = f"{date_part}T{time_part}"
+            dt = datetime.fromisoformat(ts)
+        day = dt.strftime('%Y-%m-%d')
         existing[day][typ] = (ts, desc)
 
-    # 一時保存とパース
     temp_csv = TextIOWrapper(uploaded_file.stream, encoding='utf-8-sig')
     reader = csv.DictReader(temp_csv)
     incoming = defaultdict(dict)
     for row in reader:
-        day = row['日付']
-        if row.get('出勤'):
-            incoming[day]['in'] = (f"{day}T{row['出勤']}:00", row.get('業務内容', ''))
-        if row.get('退勤'):
-            incoming[day]['out'] = (f"{day}T{row['退勤']}:00", row.get('業務内容', ''))
+        raw_date = datetime.strptime(row['日付'], '%Y/%m/%d').strftime('%Y-%m-%d')
+        desc = row.get('業務内容', '')
+        if row.get('出勤時刻'):
+            incoming[raw_date]['in'] = (f"{raw_date}T{row['出勤時刻']}:00", desc)
+        if row.get('退勤時刻'):
+            incoming[raw_date]['out'] = (f"{raw_date}T{row['退勤時刻']}:00", desc)
 
-    # 衝突データ検出
     conflicts = []
     for day in incoming:
         for typ in incoming[day]:
@@ -166,17 +217,17 @@ def import_csv():
                     'incoming': incoming[day][typ]
                 })
 
-    # 衝突がなければ直接挿入
     if not conflicts:
         for day in incoming:
-            for typ, (ts, desc) in incoming[day].items():
-                c.execute("DELETE FROM attendance WHERE user_id = ? AND type = ? AND substr(timestamp, 1, 10) = ?", (user_id, typ, day))
-                c.execute("INSERT INTO attendance (user_id, timestamp, type, description) VALUES (?, ?, ?, ?)", (user_id, ts, typ, desc))
+            for typ in ['in', 'out']:
+                if typ in incoming[day]:
+                    ts, desc = incoming[day][typ]
+                    c.execute("DELETE FROM attendance WHERE user_id = ? AND type = ? AND substr(timestamp, 1, 10) = ?", (user_id, typ, day))
+                    c.execute("INSERT INTO attendance (user_id, timestamp, type, description) VALUES (?, ?, ?, ?)", (user_id, ts, typ, desc))
         conn.commit()
         conn.close()
-        return redirect(url_for('index'))
+        return redirect(url_for('view_my_logs'))
 
-    # 衝突データをテンプレートへ渡す
     conn.close()
     return render_template('resolve_conflicts.html', conflicts=conflicts, incoming=incoming, user_id=user_id)
 
@@ -200,7 +251,38 @@ def resolve_conflicts():
     conn.commit()
     conn.close()
     return redirect(url_for('index'))
-    
+
+@app.route('/my/logs')
+def view_my_logs():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    user_id = session['user_id']
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT timestamp, type, description FROM attendance WHERE user_id = ? ORDER BY timestamp", (user_id,))
+    records = c.fetchall()
+    conn.close()
+
+    attendance_by_day = {}
+    for ts, typ, desc in records:
+        try:
+            dt = datetime.fromisoformat(ts)
+        except ValueError:
+            parts = ts.split('T')
+            if len(parts) == 2:
+                date_part, time_part = parts
+                if len(time_part.split(':')[0]) == 1:
+                    time_part = '0' + time_part
+                    ts = f"{date_part}T{time_part}"
+            dt = datetime.fromisoformat(ts)
+        date = dt.strftime('%Y-%m-%d')
+        time = dt.strftime('%H:%M')
+        if date not in attendance_by_day:
+            attendance_by_day[date] = {'in': None, 'out': None}
+        attendance_by_day[date][typ] = {'time': time, 'description': desc}
+
+    return render_template('my_logs.html', logs=attendance_by_day)
+
 @app.route('/')
 def index():
     if 'user_id' not in session:
