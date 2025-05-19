@@ -15,26 +15,16 @@ DB_PATH = os.path.join(os.path.dirname(__file__), 'database', 'kintai.db')
 EXPORT_DIR = os.path.join(os.path.dirname(__file__), 'exports')
 os.makedirs(EXPORT_DIR, exist_ok=True)
 
-os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-conn = sqlite3.connect(DB_PATH)
-c = conn.cursor()
-c.execute('''CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email TEXT UNIQUE NOT NULL,
-    name TEXT NOT NULL,
-    password_hash TEXT NOT NULL,
-    is_admin INTEGER DEFAULT 0
-)''')
-c.execute('''CREATE TABLE IF NOT EXISTS attendance (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    timestamp TEXT NOT NULL,
-    type TEXT CHECK(type IN ('in','out')) NOT NULL,
-    description TEXT,
-    FOREIGN KEY(user_id) REFERENCES users(id)
-)''')
-conn.commit()
-conn.close()
+def initialize_database():
+    if not os.path.exists(DB_PATH):
+        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+        conn = sqlite3.connect(DB_PATH)
+        with open(os.path.join(os.path.dirname(__file__), 'database', 'schema.sql'), encoding='utf-8') as f:
+            conn.executescript(f.read())
+        conn.commit()
+        conn.close()
+
+initialize_database()
 
 def generate_monthly_csv(year: int, month: int):
     conn = sqlite3.connect(DB_PATH)
