@@ -1,1 +1,3 @@
 database/kintai.db
+venv
+.DS_Store
