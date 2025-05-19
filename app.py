@@ -180,6 +180,27 @@ def import_csv():
     conn.close()
     return render_template('resolve_conflicts.html', conflicts=conflicts, incoming=incoming, user_id=user_id)
 
+@app.route('/my/import/resolve', methods=['POST'])
+def resolve_conflicts():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    user_id = session['user_id']
+
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    for key, value in request.form.items():
+        if key.startswith("choice_"):
+            _, day, typ = key.split("_", 2)
+            choice = value  # 'existing' or 'incoming'
+            if choice == 'incoming':
+                ts = request.form[f"incoming_ts_{day}_{typ}"]
+                desc = request.form.get(f"incoming_desc_{day}_{typ}", '')
+                c.execute("DELETE FROM attendance WHERE user_id = ? AND type = ? AND substr(timestamp, 1, 10) = ?", (user_id, typ, day))
+                c.execute("INSERT INTO attendance (user_id, timestamp, type, description) VALUES (?, ?, ?, ?)", (user_id, ts, typ, desc))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('index'))
+    
 @app.route('/')
 def index():
     if 'user_id' not in session:
