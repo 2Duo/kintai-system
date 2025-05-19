@@ -7,6 +7,9 @@
 </head>
 <body>
     <div class="container">
+        <div style="text-align: right;">
+            <a href="{{ url_for('logout') }}">ログアウト</a>
+        </div>
         <h1>勤怠打刻</h1>
         <p>ようこそ、{{ user_name }} さん</p>
         <form action="/punch" method="post">
