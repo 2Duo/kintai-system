@@ -1,44 +1,35 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>CSV出力</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-    <div class="container">
-        <div style="text-align: right;">
-            <a href="{{ url_for('logout') }}">ログアウト</a>
-        </div>
-        <h1>CSV出力</h1>
+{% extends 'base.html' %}
 
-        <h2>定期生成済みファイル</h2>
-        <ul>
-            {% for file in files %}
-                <li><a href="{{ url_for('download_export_file', filename=file) }}">{{ file }}</a></li>
-            {% endfor %}
-        </ul>
+{% block title %}CSV出力{% endblock %}
 
-        <h2>任意期間のCSV生成</h2>
-        <form method="post">
-            <label>ユーザー名:
-                <select name="name">
-                    {% for name in user_names %}
-                        <option value="{{ name }}">{{ name }}</option>
-                    {% endfor %}
-                </select>
-            </label><br>
-            <label>過去何日分:
-                <input type="number" name="days" required>
-            </label><br>
-            <button type="submit">CSV生成してダウンロード</button>
-        </form>
+{% block content %}
+<h2>定期生成済みファイル</h2>
+<ul>
+  {% for file in files %}
+    <li><a href="{{ url_for('download_export_file', filename=file) }}">{{ file }}</a></li>
+  {% endfor %}
+</ul>
 
-        <h2>今月分のCSVを手動で一括生成</h2>
-        <form method="post">
-            <input type="hidden" name="action" value="generate_csv_now">
-            <button type="submit">今月分のCSVをすぐ生成</button>
-        </form>
-    </div>
-</body>
-</html>
+<h2 class="mt-4">任意期間のCSVを生成</h2>
+<form method="POST">
+  <div class="mb-3">
+    <label class="form-label">氏名</label>
+    <select name="name" class="form-select" required>
+      {% for name in user_names %}
+      <option value="{{ name }}">{{ name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="mb-3">
+    <label class="form-label">過去何日分？</label>
+    <input type="number" name="days" class="form-control" required>
+  </div>
+  <button type="submit" class="btn btn-success">CSV生成＆ダウンロード</button>
+</form>
+
+<h2 class="mt-4">今月のCSVをすぐ生成</h2>
+<form method="POST">
+  <input type="hidden" name="action" value="generate_csv_now">
+  <button type="submit" class="btn btn-secondary">今すぐ月次CSVを生成</button>
+</form>
+{% endblock %}

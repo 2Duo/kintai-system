@@ -1,45 +1,38 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <title>CSVインポート確認</title>
-</head>
-<body>
-    <h2>CSVインポートの確認</h2>
-    <p>以下のデータは既に存在する記録と衝突しています。どちらを保持するか選択してください。</p>
+{% extends 'base.html' %}
 
-    <form method="POST" action="{{ url_for('resolve_conflicts') }}">
-        <input type="hidden" name="user_id" value="{{ user_id }}">
-        <input type="hidden" name="referer" value="{{ referer }}">
+{% block title %}CSVインポートの衝突確認{% endblock %}
 
-        <table border="1">
-            <tr>
-                <th>日付</th>
-                <th>区分</th>
-                <th>既存の記録</th>
-                <th>新しい記録</th>
-                <th>使用する記録</th>
-            </tr>
-            {% for conflict in conflicts %}
-            <tr>
-                <td>{{ conflict.day }}</td>
-                <td>{{ '出勤' if conflict.type == 'in' else '退勤' }}</td>
-                <td>{{ conflict.existing[0][11:16] }} / {{ conflict.existing[1] or '（なし）' }}</td>
-                <td>{{ conflict.incoming[0][11:16] }} / {{ conflict.incoming[1] or '（なし）' }}</td>
-                <td>
-                    <label>
-                        <input type="radio" name="{{ conflict.day }}_{{ conflict.type }}" value="existing" checked> 既存
-                    </label>
-                    <label>
-                        <input type="radio" name="{{ conflict.day }}_{{ conflict.type }}" value="incoming"> 新規
-                    </label>
-                </td>
-            </tr>
-            {% endfor %}
-        </table>
-
-        <br>
-        <button type="submit">選択内容で保存</button>
-    </form>
-</body>
-</html>
+{% block content %}
+<h2>CSVインポート時の衝突確認</h2>
+<form method="POST" action="{{ url_for('resolve_conflicts') }}">
+  <input type="hidden" name="referer" value="{{ url_for('view_my_logs') }}">
+  <table class="table table-bordered">
+    <thead>
+      <tr>
+        <th>日付</th>
+        <th>区分</th>
+        <th>既存</th>
+        <th>インポート</th>
+        <th>選択</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for conflict in conflicts %}
+      <tr>
+        <td>{{ conflict.day }}</td>
+        <td>{{ '出勤' if conflict.type == 'in' else '退勤' }}</td>
+        <td>{{ conflict.existing[0][11:16] }} / {{ conflict.existing[1] }}</td>
+        <td>{{ conflict.incoming[0][11:16] }} / {{ conflict.incoming[1] }}</td>
+        <td>
+          <input type="radio" name="{{ conflict.day }}_{{ conflict.type }}" value="existing" checked> 既存<br>
+          <input type="radio" name="{{ conflict.day }}_{{ conflict.type }}" value="incoming"> 新規
+          <input type="hidden" name="{{ conflict.day }}_{{ conflict.type }}_incoming_ts" value="{{ conflict.incoming[0] }}">
+          <input type="hidden" name="{{ conflict.day }}_{{ conflict.type }}_incoming_desc" value="{{ conflict.incoming[1] }}">
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <button type="submit" class="btn btn-primary">確定</button>
+</form>
+{% endblock %}

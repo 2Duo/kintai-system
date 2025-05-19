@@ -1,23 +1,26 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>ユーザー作成</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-    <div class="container">
-        <div style="text-align: right;">
-            <a href="{{ url_for('logout') }}">ログアウト</a>
-        </div>
-        <h1>新規ユーザー作成</h1>
-        <form action="/admin/create_user" method="post">
-            <input type="text" name="name" placeholder="氏名" required><br>
-            <input type="email" name="email" placeholder="メールアドレス" required><br>
-            <input type="password" name="password" placeholder="初期パスワード" required><br>
-            <label><input type="checkbox" name="is_admin"> 管理者権限を付与</label><br>
-            <button type="submit">ユーザー作成</button>
-        </form>
-    </div>
-</body>
-</html>
+{% extends 'base.html' %}
+
+{% block title %}ユーザー作成{% endblock %}
+
+{% block content %}
+<h2>ユーザー作成</h2>
+<form method="POST">
+  <div class="mb-3">
+    <label class="form-label">メールアドレス</label>
+    <input type="email" class="form-control" name="email" required>
+  </div>
+  <div class="mb-3">
+    <label class="form-label">氏名</label>
+    <input type="text" class="form-control" name="name" required>
+  </div>
+  <div class="mb-3">
+    <label class="form-label">パスワード</label>
+    <input type="password" class="form-control" name="password" required>
+  </div>
+  <div class="form-check mb-3">
+    <input type="checkbox" class="form-check-input" name="is_admin" value="1">
+    <label class="form-check-label">管理者権限を付与</label>
+  </div>
+  <button type="submit" class="btn btn-primary">作成</button>
+</form>
+{% endblock %}

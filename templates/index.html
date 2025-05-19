@@ -1,31 +1,42 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>勤怠打刻</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-    <div class="container">
-        <div style="text-align: right;">
-            <a href="{{ url_for('logout') }}">ログアウト</a>
-        </div>
-        <h1>勤怠打刻</h1>
-        <p>ようこそ、{{ user_name }} さん</p>
-        <form action="/punch" method="post">
-            <label for="timestamp">時刻を入力：</label>
-            <input type="datetime-local" name="timestamp" id="timestamp" required><br>
-            <label for="description">本日の業務内容：</label><br>
-            <textarea name="description" rows="4" cols="40" placeholder="例：出荷対応、在庫確認、会議参加など"></textarea><br>
-            <button type="submit" name="type" value="in">出勤</button>
-            <button type="submit" name="type" value="out">退勤</button>
-        </form>
-    </div>
+{% extends 'base.html' %}
 
-    <script>
-        const now = new Date();
-        now.setMinutes(now.getMinutes() - now.getTimezoneOffset()); // ローカルタイム調整
-        document.getElementById('timestamp').value = now.toISOString().slice(0,16);
-    </script>
-</body>
-</html>
+{% block title %}勤怠打刻{% endblock %}
+
+{% block content %}
+<h2>勤怠打刻</h2>
+<form method="POST" action="{{ url_for('punch') }}">
+  <div class="mb-3">
+    <label for="timestamp" class="form-label">日付と時刻</label>
+    <input type="datetime-local" class="form-control" name="timestamp" id="timestamp" required>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">区分</label><br>
+    <div class="form-check form-check-inline">
+      <input class="form-check-input" type="radio" name="type" id="type_in" value="in" checked>
+      <label class="form-check-label" for="type_in">出勤</label>
+    </div>
+    <div class="form-check form-check-inline">
+      <input class="form-check-input" type="radio" name="type" id="type_out" value="out">
+      <label class="form-check-label" for="type_out">退勤</label>
+    </div>
+  </div>
+
+  <div class="mb-3">
+    <label for="description" class="form-label">業務内容（退勤時のみ）</label>
+    <input type="text" class="form-control" name="description" id="description">
+  </div>
+
+  <button type="submit" class="btn btn-primary">打刻</button>
+</form>
+
+<script>
+  // ページ読み込み時に現在時刻を自動入力
+  window.onload = function () {
+    const now = new Date();
+    const offset = now.getTimezoneOffset();
+    const localISOTime = new Date(now.getTime() - offset * 60000).toISOString().slice(0, 16);
+    document.getElementById("timestamp").value = localISOTime;
+  };
+</script>
+{% endblock %}
