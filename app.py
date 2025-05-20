@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, send_file
+from flask import Flask, render_template, request, redirect, url_for, session, send_file, flash
 import sqlite3
 from datetime import datetime, timedelta
 import os
@@ -196,15 +196,24 @@ def download_export_file(filename):
 def import_csv():
     if 'user_id' not in session:
         return redirect(url_for('login'))
+
     user_id = session['user_id']
     uploaded_file = request.files['file']
     if not uploaded_file or not uploaded_file.filename.endswith('.csv'):
-        return 'CSVファイルを選択してください'
+        flash("CSVファイルを選択してください。", "danger")
+        return redirect(url_for('view_my_logs'))
+
+    try:
+        temp_csv = TextIOWrapper(uploaded_file.stream, encoding='utf-8-sig')
+        reader = csv.DictReader(temp_csv)
+    except Exception:
+        flash("CSVファイルの読み込みに失敗しました。フォーマットを確認してください。", "danger")
+        return redirect(url_for('view_my_logs'))
 
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
-    # 既存データ読み込み
+    # 既存データの読み込み
     c.execute("SELECT timestamp, type, description FROM attendance WHERE user_id = ?", (user_id,))
     existing = defaultdict(dict)
     for ts, typ, desc in c.fetchall():
@@ -212,19 +221,23 @@ def import_csv():
         day = dt.strftime('%Y-%m-%d')
         existing[day][typ] = (ts, desc)
 
-    temp_csv = TextIOWrapper(uploaded_file.stream, encoding='utf-8-sig')
-    reader = csv.DictReader(temp_csv)
     incoming = defaultdict(dict)
-    for row in reader:
-        raw_date = datetime.strptime(row['日付'], '%Y/%m/%d').strftime('%Y-%m-%d')
-        desc = row.get('業務内容', '')
-        if row.get('出勤時刻'):
-            time = normalize_time_str(row['出勤時刻'])
-            incoming[raw_date]['in'] = (f"{raw_date}T{time}:00", desc)
-        if row.get('退勤時刻'):
-            time = normalize_time_str(row['退勤時刻'])
-            incoming[raw_date]['out'] = (f"{raw_date}T{time}:00", desc)
+    try:
+        for row in reader:
+            raw_date = datetime.strptime(row['日付'], '%Y/%m/%d').strftime('%Y-%m-%d')
+            desc = row.get('業務内容', '')
+            if row.get('出勤時刻'):
+                time = normalize_time_str(row['出勤時刻'])
+                incoming[raw_date]['in'] = (f"{raw_date}T{time}:00", desc)
+            if row.get('退勤時刻'):
+                time = normalize_time_str(row['退勤時刻'])
+                incoming[raw_date]['out'] = (f"{raw_date}T{time}:00", desc)
+    except Exception:
+        conn.close()
+        flash("CSVデータの形式が正しくありません。日付・時刻形式を確認してください。", "danger")
+        return redirect(url_for('view_my_logs'))
 
+    # 衝突検出
     conflicts = []
     for day in incoming:
         for typ in incoming[day]:
@@ -236,17 +249,22 @@ def import_csv():
                     'incoming': incoming[day][typ]
                 })
 
+    # 衝突なし → DB反映
     if not conflicts:
         for day in incoming:
             for typ in ['in', 'out']:
                 if typ in incoming[day]:
                     ts, desc = incoming[day][typ]
-                    c.execute("DELETE FROM attendance WHERE user_id = ? AND type = ? AND substr(timestamp, 1, 10) = ?", (user_id, typ, day))
-                    c.execute("INSERT INTO attendance (user_id, timestamp, type, description) VALUES (?, ?, ?, ?)", (user_id, ts, typ, desc))
+                    c.execute("DELETE FROM attendance WHERE user_id = ? AND type = ? AND substr(timestamp, 1, 10) = ?",
+                              (user_id, typ, day))
+                    c.execute("INSERT INTO attendance (user_id, timestamp, type, description) VALUES (?, ?, ?, ?)",
+                              (user_id, ts, typ, desc))
         conn.commit()
         conn.close()
+        flash("CSVインポートが完了しました。", "success")
         return redirect(url_for('view_my_logs'))
 
+    # 衝突あり → 確認画面へ
     conn.close()
     return render_template('resolve_conflicts.html', conflicts=conflicts, incoming=incoming, user_id=user_id, referer=request.referrer or url_for('view_my_logs'))
 
@@ -255,22 +273,51 @@ def resolve_conflicts():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     user_id = session['user_id']
+    referer = request.form.get('referer', url_for('view_my_logs'))
 
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
+
+    errors = []
+    updated_count = 0
+
     for key, value in request.form.items():
         if key.startswith("choice_"):
-            _, day, typ = key.split("_", 2)
-            choice = value  # 'existing' or 'incoming'
-            if choice == 'incoming':
-                ts = request.form[f"incoming_ts_{day}_{typ}"]
-                desc = request.form.get(f"incoming_desc_{day}_{typ}", '')
-                c.execute("DELETE FROM attendance WHERE user_id = ? AND type = ? AND substr(timestamp, 1, 10) = ?", (user_id, typ, day))
-                c.execute("INSERT INTO attendance (user_id, timestamp, type, description) VALUES (?, ?, ?, ?)", (user_id, ts, typ, desc))
+            try:
+                _, day, typ = key.split("_", 2)
+                choice = value  # 'existing' or 'incoming'
+
+                if choice == 'incoming':
+                    ts_key = f"incoming_ts_{day}_{typ}"
+                    desc_key = f"incoming_desc_{day}_{typ}"
+
+                    if ts_key not in request.form or not request.form[ts_key].strip():
+                        errors.append(f"{day} の {typ}：時刻が指定されていません。")
+                        continue
+
+                    ts = request.form[ts_key]
+                    desc = request.form.get(desc_key, '')
+
+                    # 書き込み処理
+                    c.execute("DELETE FROM attendance WHERE user_id = ? AND type = ? AND substr(timestamp, 1, 10) = ?",
+                              (user_id, typ, day))
+                    c.execute("INSERT INTO attendance (user_id, timestamp, type, description) VALUES (?, ?, ?, ?)",
+                              (user_id, ts, typ, desc))
+                    updated_count += 1
+
+            except Exception as e:
+                errors.append(f"{key} の処理中に予期しないエラーが発生しました。")
+
     conn.commit()
     conn.close()
-    referer = request.form.get('referer', url_for('view_my_logs'))
-    return redirect(referer)                    
+
+    if errors:
+        for msg in errors:
+            flash(msg, "danger")
+        return redirect(referer)
+
+    flash(f"{updated_count} 件の勤怠データを更新しました。", "success")
+    return redirect(referer)          
 
 @app.route('/my/logs')
 def view_my_logs():
@@ -383,12 +430,16 @@ def login():
         c.execute("SELECT id, name, password_hash, is_admin FROM users WHERE email = ?", (email,))
         user = c.fetchone()
         conn.close()
+
         if user and check_password_hash(user[2], password):
             session['user_id'] = user[0]
             session['user_name'] = user[1]
             session['is_admin'] = bool(user[3])
             return redirect(url_for('index'))
-        return 'ログイン失敗'
+
+        flash("メールアドレスまたはパスワードが正しくありません。", "danger")
+        return redirect(url_for('login'))
+
     return render_template('login.html')
 
 @app.route('/logout')
@@ -536,12 +587,14 @@ def list_users():
 def create_user():
     if not session.get('is_admin'):
         return 'アクセス拒否'
+
     if request.method == 'POST':
         name = request.form['name']
         email = request.form['email']
         password = request.form['password']
         is_admin = int('is_admin' in request.form)
         password_hash = generate_password_hash(password)
+
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         try:
@@ -550,9 +603,13 @@ def create_user():
             conn.commit()
         except sqlite3.IntegrityError:
             conn.close()
-            return 'メールアドレスが既に登録されています'
+            flash("このメールアドレスはすでに登録されています。", "danger")
+            return redirect(url_for('create_user'))
+
         conn.close()
+        flash("ユーザーを作成しました。", "success")
         return redirect(url_for('list_users'))
+
     return render_template('create_user.html')
 
 @app.route('/admin/users/manage', methods=['POST'])
@@ -577,17 +634,45 @@ def update_managed_users():
 def edit_user(user_id):
     if not session.get('is_admin'):
         return 'アクセス拒否'
+
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
+
     if request.method == 'POST':
-        name = request.form['name']
-        email = request.form['email']
+        name = request.form['name'].strip()
+        email = request.form['email'].strip()
         is_admin = int('is_admin' in request.form)
-        overtime_threshold = request.form.get('overtime_threshold', '18:00')
-        c.execute("UPDATE users SET name = ?, email = ?, is_admin = ?, overtime_threshold = ? WHERE id = ?", (name, email, is_admin, overtime_threshold, user_id))
-        conn.commit()
+        overtime_threshold = request.form.get('overtime_threshold', '18:00').strip()
+
+        # バリデーション
+        errors = []
+        if not name:
+            errors.append("氏名を入力してください。")
+        if not email or "@" not in email:
+            errors.append("正しいメールアドレスを入力してください。")
+        try:
+            datetime.strptime(overtime_threshold, '%H:%M')
+        except ValueError:
+            errors.append("残業開始時刻は HH:MM 形式で入力してください。")
+
+        if errors:
+            for msg in errors:
+                flash(msg, "danger")
+            conn.close()
+            return redirect(url_for('edit_user', user_id=user_id))
+
+        # 更新処理
+        try:
+            c.execute("UPDATE users SET name = ?, email = ?, is_admin = ?, overtime_threshold = ? WHERE id = ?",
+                      (name, email, is_admin, overtime_threshold, user_id))
+            conn.commit()
+            flash("ユーザー情報を更新しました。", "success")
+        except sqlite3.IntegrityError:
+            flash("このメールアドレスは既に登録されています。", "danger")
+
         conn.close()
         return redirect(url_for('list_users'))
+
     c.execute("SELECT name, email, is_admin, overtime_threshold FROM users WHERE id = ?", (user_id,))
     user = c.fetchone()
     conn.close()
