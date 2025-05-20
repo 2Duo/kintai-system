@@ -52,9 +52,11 @@ def generate_monthly_csv(year: int, month: int):
     c = conn.cursor()
     start = datetime(year, month, 1)
     end = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
-    c.execute("SELECT id, name FROM users")
+
+    c.execute("SELECT id, name, overtime_threshold FROM users")
     users = c.fetchall()
-    for user_id, name in users:
+
+    for user_id, name, overtime_threshold in users:
         c.execute("""
             SELECT timestamp, type, description FROM attendance
             WHERE user_id = ? AND timestamp >= ? AND timestamp < ?
@@ -63,6 +65,7 @@ def generate_monthly_csv(year: int, month: int):
         rows = c.fetchall()
         if not rows:
             continue
+
         daily_data = defaultdict(lambda: {'in': None, 'out': None, 'description': ''})
         for ts, typ, desc in rows:
             dt = safe_fromisoformat(ts)
@@ -79,12 +82,24 @@ def generate_monthly_csv(year: int, month: int):
         filepath = os.path.join(EXPORT_DIR, filename)
         with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
             writer = csv.writer(f)
-            writer.writerow(['日付', '曜日', '出勤時刻', '退勤時刻', '業務内容'])
+            writer.writerow(['日付', '曜日', '出勤時刻', '退勤時刻', '業務内容', '残業時間'])
+
             for day in sorted(daily_data):
                 data = daily_data[day]
                 dt = datetime.strptime(day, '%Y/%m/%d')
                 weekday = '月火水木金土日'[dt.weekday()]
-                writer.writerow([day, weekday, data['in'], data['out'], data['description']])
+                overtime = ''
+                if data['out']:
+                    try:
+                        out_dt = datetime.strptime(data['out'], '%H:%M')
+                        th_dt = datetime.strptime(overtime_threshold or '18:00', '%H:%M')
+                        if out_dt > th_dt:
+                            delta = out_dt - th_dt
+                            h, m = divmod(delta.seconds // 60, 60)
+                            overtime = f"{h:02d}:{m:02d}"
+                    except:
+                        pass
+                writer.writerow([day, weekday, data['in'], data['out'], data['description'], overtime])
     conn.close()
 
 def delete_old_exports(base_dir='exports', days=30):
@@ -261,9 +276,17 @@ def resolve_conflicts():
 def view_my_logs():
     if 'user_id' not in session:
         return redirect(url_for('login'))
+
     user_id = session['user_id']
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
+
+    # ユーザーの残業しきい時刻を取得（例: '18:00'）
+    c.execute("SELECT overtime_threshold FROM users WHERE id = ?", (user_id,))
+    row = c.fetchone()
+    overtime_threshold = row[0] if row else '18:00'
+
+    # 勤怠記録を取得
     c.execute("SELECT timestamp, type, description FROM attendance WHERE user_id = ? ORDER BY timestamp", (user_id,))
     records = c.fetchall()
     conn.close()
@@ -275,8 +298,24 @@ def view_my_logs():
         weekday = '月火水木金土日'[dt.weekday()]
         time = dt.strftime('%H:%M')
         if date not in attendance_by_day:
-            attendance_by_day[date] = {'weekday': weekday, 'in': None, 'out': None}
+            attendance_by_day[date] = {'weekday': weekday, 'in': None, 'out': None, 'overtime': ''}
         attendance_by_day[date][typ] = {'time': time, 'description': desc}
+
+    # 残業時間を日別に算出
+    for date, data in attendance_by_day.items():
+        if data['out']:
+            out_time = data['out']['time']
+            try:
+                out_dt = datetime.strptime(out_time, '%H:%M')
+                th_dt = datetime.strptime(overtime_threshold, '%H:%M')
+                if out_dt > th_dt:
+                    delta = out_dt - th_dt
+                    hours, minutes = divmod(delta.seconds // 60, 60)
+                    data['overtime'] = f"{hours:02d}:{minutes:02d}"
+            except:
+                data['overtime'] = ''
+        else:
+            data['overtime'] = ''
 
     return render_template('my_logs.html', logs=attendance_by_day)
 
@@ -386,6 +425,12 @@ def export_combined():
         def generate_csv_for(user_id, name, target_dir):
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
+
+            # 残業しきい時刻を取得（デフォルト: '18:00'）
+            c.execute("SELECT overtime_threshold FROM users WHERE id = ?", (user_id,))
+            row = c.fetchone()
+            overtime_threshold = row[0] if row and row[0] else '18:00'
+
             c.execute("""
                 SELECT timestamp, type, description FROM attendance
                 WHERE user_id = ? AND timestamp >= ? AND timestamp < ?
@@ -412,12 +457,27 @@ def export_combined():
             filepath = os.path.join(target_dir, filename)
             with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
                 writer = csv.writer(f)
-                writer.writerow(['日付', '曜日', '出勤時刻', '退勤時刻', '業務内容'])
+                writer.writerow(['日付', '曜日', '出勤時刻', '退勤時刻', '業務内容', '残業時間'])
+
                 for day in sorted(daily_data):
                     data = daily_data[day]
                     dt = datetime.strptime(day, '%Y/%m/%d')
                     weekday = '月火水木金土日'[dt.weekday()]
-                    writer.writerow([day, weekday, data['in'], data['out'], data['description']])
+
+                    overtime = ''
+                    if data['out']:
+                        try:
+                            out_dt = datetime.strptime(data['out'], '%H:%M')
+                            th_dt = datetime.strptime(overtime_threshold, '%H:%M')
+                            if out_dt > th_dt:
+                                delta = out_dt - th_dt
+                                h, m = divmod(delta.seconds // 60, 60)
+                                overtime = f"{h:02d}:{m:02d}"
+                        except:
+                            pass
+
+                    writer.writerow([day, weekday, data['in'], data['out'], data['description'], overtime])
+
             return filepath
 
         if request.form['action'] == 'single_user':
@@ -523,11 +583,12 @@ def edit_user(user_id):
         name = request.form['name']
         email = request.form['email']
         is_admin = int('is_admin' in request.form)
-        c.execute("UPDATE users SET name = ?, email = ?, is_admin = ? WHERE id = ?", (name, email, is_admin, user_id))
+        overtime_threshold = request.form.get('overtime_threshold', '18:00')
+        c.execute("UPDATE users SET name = ?, email = ?, is_admin = ?, overtime_threshold = ? WHERE id = ?", (name, email, is_admin, overtime_threshold, user_id))
         conn.commit()
         conn.close()
         return redirect(url_for('list_users'))
-    c.execute("SELECT name, email, is_admin FROM users WHERE id = ?", (user_id,))
+    c.execute("SELECT name, email, is_admin, overtime_threshold FROM users WHERE id = ?", (user_id,))
     user = c.fetchone()
     conn.close()
     return render_template('edit_user.html', user_id=user_id, user=user)

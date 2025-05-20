@@ -1,38 +1,47 @@
 {% extends 'base.html' %}
-
 {% block title %}CSVインポートの衝突確認{% endblock %}
 
 {% block content %}
 <h2>CSVインポート時の衝突確認</h2>
+<p>以下のデータにおいて既存の記録が存在します。上書きするかどうかを選択してください。</p>
+
 <form method="POST" action="{{ url_for('resolve_conflicts') }}">
   <input type="hidden" name="referer" value="{{ url_for('view_my_logs') }}">
-  <table class="table table-bordered">
-    <thead>
+  <table class="table table-bordered align-middle">
+    <thead class="table-light">
       <tr>
         <th>日付</th>
         <th>区分</th>
-        <th>既存</th>
-        <th>インポート</th>
+        <th>タイプ</th>
+        <th>時刻</th>
+        <th>業務内容</th>
         <th>選択</th>
       </tr>
     </thead>
     <tbody>
       {% for conflict in conflicts %}
       <tr>
-        <td>{{ conflict.day }}</td>
-        <td>{{ '出勤' if conflict.type == 'in' else '退勤' }}</td>
+        <td rowspan="2">{{ conflict.day }}</td>
+        <td rowspan="2">{{ '出勤' if conflict.type == 'in' else '退勤' }}</td>
+        <td>既存</td>
         <td>{{ conflict.existing[0][11:16] }}</td>
-        <td>{{ conflict.incoming[0][11:16] }} / {{ conflict.incoming[1] }}</td>
-        <td>
+        <td>{{ conflict.existing[1] or '（なし）' }}</td>
+        <td rowspan="2">
           <input type="radio" name="choice_{{ conflict.day }}_{{ conflict.type }}" value="existing" checked> 既存<br>
           <input type="radio" name="choice_{{ conflict.day }}_{{ conflict.type }}" value="incoming"> 新規
           <input type="hidden" name="incoming_ts_{{ conflict.day }}_{{ conflict.type }}" value="{{ conflict.incoming[0] }}">
           <input type="hidden" name="incoming_desc_{{ conflict.day }}_{{ conflict.type }}" value="{{ conflict.incoming[1] }}">
         </td>
       </tr>
+      <tr>
+        <td>新規</td>
+        <td>{{ conflict.incoming[0][11:16] }}</td>
+        <td>{{ conflict.incoming[1] or '（なし）' }}</td>
+      </tr>
       {% endfor %}
     </tbody>
   </table>
-  <button type="submit" class="btn btn-primary">確定</button>
+
+  <button type="submit" class="btn btn-primary">選択内容を確定してインポート</button>
 </form>
 {% endblock %}

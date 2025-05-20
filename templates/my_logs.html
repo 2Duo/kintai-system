@@ -12,6 +12,7 @@
       <th>出勤</th>
       <th>退勤</th>
       <th>業務内容</th>
+      <th>残業時間</th>
     </tr>
   </thead>
   <tbody>
@@ -22,6 +23,7 @@
       <td>{{ data.in.time if data.in else '' }}</td>
       <td>{{ data.out.time if data.out else '' }}</td>
       <td>{{ data.out.description if data.out else '' }}</td>
+      <td>{{ data.overtime }}</td>
       <td>
         <a href="{{ url_for('edit_log', date=date) }}" class="btn btn-sm btn-primary">編集</a>
       </td>      
