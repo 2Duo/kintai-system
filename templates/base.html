@@ -18,6 +18,9 @@
         <li class="nav-item"><a class="nav-link" href="{{ url_for('create_user') }}">ユーザー作成</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('list_users') }}">ユーザー管理</a></li>
         {% endif %}
+        {% if session.get('user_id') %}
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('change_password') }}">パスワード変更</a></li>
+        {% endif %}
       </ul>
       {% if session.get('user_id') %}
       <span class="navbar-text me-3">{{ session.get('user_name') }}</span>
@@ -29,7 +32,7 @@
 
 <div class="container">
 
-  <!-- ✅ ここに flash メッセージ表示を追加 -->
+  <!-- ✅ flash メッセージ表示 -->
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
       {% for category, message in messages %}

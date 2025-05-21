@@ -1,4 +1,4 @@
 database/kintai.db
-venv
+venv/
 .DS_Store
 exports/

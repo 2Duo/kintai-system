@@ -192,6 +192,39 @@ def download_export_file(filename):
         return 'ファイルが存在しません'
     return send_file(filepath, as_attachment=True, mimetype='text/csv')
 
+@app.route('/my/password', methods=['GET', 'POST'])
+def change_password():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    user_id = session['user_id']
+
+    if request.method == 'POST':
+        current = request.form['current_password']
+        new = request.form['new_password']
+        confirm = request.form['confirm_password']
+
+        if new != confirm:
+            flash("新しいパスワードが一致しません。", "danger")
+            return redirect(url_for('change_password'))
+
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT password_hash FROM users WHERE id = ?", (user_id,))
+        row = c.fetchone()
+        if not row or not check_password_hash(row[0], current):
+            conn.close()
+            flash("現在のパスワードが正しくありません。", "danger")
+            return redirect(url_for('change_password'))
+
+        new_hash = generate_password_hash(new)
+        c.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user_id))
+        conn.commit()
+        conn.close()
+        flash("パスワードを更新しました。", "success")
+        return redirect(url_for('index'))
+
+    return render_template('change_password.html')
+
 @app.route('/my/import', methods=['POST'])
 def import_csv():
     if 'user_id' not in session:
@@ -643,6 +676,7 @@ def edit_user(user_id):
         email = request.form['email'].strip()
         is_admin = int('is_admin' in request.form)
         overtime_threshold = request.form.get('overtime_threshold', '18:00').strip()
+        new_password = request.form.get('new_password', '').strip()
 
         # バリデーション
         errors = []
@@ -661,12 +695,20 @@ def edit_user(user_id):
             conn.close()
             return redirect(url_for('edit_user', user_id=user_id))
 
-        # 更新処理
+        # 更新処理（基本項目）
         try:
             c.execute("UPDATE users SET name = ?, email = ?, is_admin = ?, overtime_threshold = ? WHERE id = ?",
                       (name, email, is_admin, overtime_threshold, user_id))
+
+            # 新パスワードが入力されていたらハッシュ化して更新
+            if new_password:
+                password_hash = generate_password_hash(new_password)
+                c.execute("UPDATE users SET password_hash = ? WHERE id = ?", (password_hash, user_id))
+                flash("パスワードを更新しました。", "success")
+
             conn.commit()
             flash("ユーザー情報を更新しました。", "success")
+
         except sqlite3.IntegrityError:
             flash("このメールアドレスは既に登録されています。", "danger")
 
