@@ -189,24 +189,37 @@ def index():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    errors = {}
     if request.method == 'POST':
         if not check_csrf():
             return redirect(url_for('login'))
-        email = request.form['email']
-        password = request.form['password']
-        conn = get_db()
-        c = conn.cursor()
-        c.execute("SELECT id, name, password_hash, is_admin FROM users WHERE email = ?", (email,))
-        user = c.fetchone()
-        conn.close()
-        if user and check_password_hash(user['password_hash'], password):
-            session['user_id'] = user['id']
-            session['user_name'] = user['name']
-            session['is_admin'] = bool(user['is_admin'])
-            return redirect(url_for('index'))
-        flash("メールアドレスまたはパスワードが正しくありません。", "danger")
-        return redirect(url_for('login'))
-    return render_template('login.html')
+        email = request.form.get('email', '')
+        password = request.form.get('password', '')
+
+        if not email:
+            errors['email'] = "メールアドレスを入力してください。"
+        if not password:
+            errors['password'] = "パスワードを入力してください。"
+
+        user = None
+        if not errors:
+            conn = get_db()
+            c = conn.cursor()
+            c.execute("SELECT id, name, password_hash, is_admin FROM users WHERE email = ?", (email,))
+            user = c.fetchone()
+            conn.close()
+            if not user or not check_password_hash(user['password_hash'], password):
+                errors['password'] = "メールアドレスまたはパスワードが正しくありません。"
+
+        if errors:
+            return render_template('login.html', errors=errors)
+        
+        session['user_id'] = user['id']
+        session['user_name'] = user['name']
+        session['is_admin'] = bool(user['is_admin'])
+        return redirect(url_for('index'))
+
+    return render_template('login.html', errors=errors)
 
 @app.route('/logout')
 def logout():
@@ -279,6 +292,46 @@ def download_export_file(filename):
 @app.route('/my/password', methods=['GET', 'POST'])
 @login_required
 def change_password():
+    user_id = session['user_id']
+    errors = {}
+    if request.method == 'POST':
+        if not check_csrf():
+            return redirect(url_for('change_password'))
+        current = request.form.get('current_password', '')
+        new = request.form.get('new_password', '')
+        confirm = request.form.get('confirm_password', '')
+
+        if not current:
+            errors['current_password'] = "現在のパスワードを入力してください。"
+        if not new:
+            errors['new_password'] = "新しいパスワードを入力してください。"
+        elif len(new) < 8:
+            errors['new_password'] = "パスワードは8文字以上で入力してください。"
+        if not confirm:
+            errors['confirm_password'] = "新しいパスワード（確認）を入力してください。"
+        elif new and new != confirm:
+            errors['confirm_password'] = "新しいパスワードが一致しません。"
+
+        if not errors:
+            conn = get_db()
+            c = conn.cursor()
+            c.execute("SELECT password_hash FROM users WHERE id = ?", (user_id,))
+            row = c.fetchone()
+            if not row or not check_password_hash(row['password_hash'], current):
+                errors['current_password'] = "現在のパスワードが正しくありません。"
+                conn.close()
+            else:
+                new_hash = generate_password_hash(new)
+                c.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user_id))
+                conn.commit()
+                conn.close()
+                flash("パスワードを更新しました。", "success")
+                return redirect(url_for('index'))
+
+        return render_template('change_password.html', errors=errors)
+
+    return render_template('change_password.html', errors=errors)
+
     user_id = session['user_id']
     if request.method == 'POST':
         if not check_csrf():
@@ -564,39 +617,40 @@ def list_users():
 @app.route('/admin/users/create', methods=['GET', 'POST'])
 @admin_required
 def create_user():
+    errors = {}
     if request.method == 'POST':
         if not check_csrf():
             return redirect(url_for('create_user'))
-        name = request.form['name'].strip()
-        email = request.form['email'].strip()
-        password = request.form['password']
+        name = request.form.get('name', '').strip()
+        email = request.form.get('email', '').strip()
+        password = request.form.get('password', '')
         is_admin = int('is_admin' in request.form)
-        # バリデーション
-        errors = []
+
         if not name:
-            errors.append("氏名を入力してください。")
+            errors['name'] = "氏名を入力してください。"
         if not is_valid_email(email):
-            errors.append("正しいメールアドレスを入力してください。")
+            errors['email'] = "正しいメールアドレスを入力してください。"
         if not password or len(password) < 8:
-            errors.append("パスワードは8文字以上で入力してください。")
+            errors['password'] = "パスワードは8文字以上で入力してください。"
+
         if errors:
-            for msg in errors:
-                flash(msg, "danger")
-            return redirect(url_for('create_user'))
+            return render_template('create_user.html', errors=errors)
+
         password_hash = generate_password_hash(password)
         conn = get_db()
         c = conn.cursor()
         try:
-            c.execute("INSERT INTO users (name, email, password_hash, is_admin, is_superadmin) VALUES (?, ?, ?, ?, 0)",(name, email, password_hash, is_admin))
+            c.execute("INSERT INTO users (name, email, password_hash, is_admin, is_superadmin) VALUES (?, ?, ?, ?, 0)",
+                      (name, email, password_hash, is_admin))
             conn.commit()
         except sqlite3.IntegrityError:
             conn.close()
-            flash("このメールアドレスはすでに登録されています。", "danger")
-            return redirect(url_for('create_user'))
+            errors['email'] = "このメールアドレスはすでに登録されています。"
+            return render_template('create_user.html', errors=errors)
         conn.close()
         flash("ユーザーを作成しました。", "success")
         return redirect(url_for('list_users'))
-    return render_template('create_user.html')
+    return render_template('create_user.html', errors=errors)
 
 @app.route('/admin/users/manage', methods=['POST'])
 @admin_required
@@ -627,26 +681,30 @@ def edit_user(user_id):
         flash("ユーザーが見つかりません。", "danger")
         return redirect(url_for('list_users'))
 
+    errors = {}
     if request.method == 'POST':
         if not check_csrf():
             return redirect(url_for('edit_user', user_id=user_id))
-        name = request.form['name'].strip()
-        email = request.form['email'].strip()
+        name = request.form.get('name', '').strip()
+        email = request.form.get('email', '').strip()
         is_admin = 1 if user['is_superadmin'] else int('is_admin' in request.form)
         overtime_threshold = request.form.get('overtime_threshold', '18:00').strip()
         new_password = request.form.get('new_password', '').strip()
-        errors = []
+
         if not name:
-            errors.append("氏名を入力してください。")
+            errors['name'] = "氏名を入力してください。"
         if not is_valid_email(email):
-            errors.append("正しいメールアドレスを入力してください。")
+            errors['email'] = "正しいメールアドレスを入力してください。"
         if overtime_threshold and not is_valid_time(overtime_threshold):
-            errors.append("残業カウント開始時刻は HH:MM 形式で入力してください。")
+            errors['overtime_threshold'] = "残業カウント開始時刻は HH:MM 形式で入力してください。"
+        # パスワードは空欄でもOK。入っている場合のみ長さバリデーション
+        if new_password and len(new_password) < 8:
+            errors['new_password'] = "パスワードは8文字以上で入力してください。"
+
         if errors:
-            for msg in errors:
-                flash(msg, "danger")
             conn.close()
-            return redirect(url_for('edit_user', user_id=user_id))
+            return render_template('edit_user.html', user_id=user_id, user=user, errors=errors)
+
         try:
             c.execute("UPDATE users SET name = ?, email = ?, is_admin = ?, overtime_threshold = ? WHERE id = ?",
                       (name, email, is_admin, overtime_threshold, user_id))
@@ -657,12 +715,14 @@ def edit_user(user_id):
             conn.commit()
             flash("ユーザー情報を更新しました。", "success")
         except sqlite3.IntegrityError:
-            flash("このメールアドレスは既に登録されています。", "danger")
+            errors['email'] = "このメールアドレスは既に登録されています。"
+            conn.close()
+            return render_template('edit_user.html', user_id=user_id, user=user, errors=errors)
         conn.close()
         return redirect(url_for('list_users'))
 
     conn.close()
-    return render_template('edit_user.html', user_id=user_id, user=user)
+    return render_template('edit_user.html', user_id=user_id, user=user, errors=errors)
 
 @app.route('/admin/users/delete/<int:user_id>', methods=['POST'])
 @admin_required

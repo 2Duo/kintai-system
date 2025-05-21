@@ -3,25 +3,64 @@
 
 {% block content %}
 <h2>新規ユーザー作成</h2>
-<form method="POST">
-  <!-- CSRFトークン追加 -->
+<form method="POST" autocomplete="off">
   <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+  
   <div class="mb-3">
     <label class="form-label">氏名</label>
-    <input type="text" name="name" class="form-control" required>
+    <input type="text" name="name"
+      class="form-control {% if errors and errors.get('name') %}is-invalid{% endif %}"
+      value="{{ request.form.get('name', '') }}"
+      required>
+    {% if errors and errors.get('name') %}
+      <div class="invalid-feedback">{{ errors.get('name') }}</div>
+    {% endif %}
   </div>
+
   <div class="mb-3">
     <label class="form-label">メールアドレス</label>
-    <input type="email" name="email" class="form-control" required>
+    <input type="email" name="email"
+      class="form-control {% if errors and errors.get('email') %}is-invalid{% endif %}"
+      value="{{ request.form.get('email', '') }}"
+      required>
+    {% if errors and errors.get('email') %}
+      <div class="invalid-feedback">{{ errors.get('email') }}</div>
+    {% endif %}
   </div>
+
   <div class="mb-3">
     <label class="form-label">パスワード</label>
-    <input type="password" name="password" class="form-control" required>
+    <div class="input-group">
+      <input type="password" name="password"
+        class="form-control {% if errors and errors.get('password') %}is-invalid{% endif %}"
+        id="createPassword"
+        required>
+      <button type="button" class="btn btn-outline-secondary" tabindex="-1"
+        onclick="togglePwd('createPassword', this)">👁</button>
+    </div>
+    {% if errors and errors.get('password') %}
+      <div class="invalid-feedback d-block">{{ errors.get('password') }}</div>
+    {% endif %}
   </div>
+
   <div class="form-check mb-3">
-    <input class="form-check-input" type="checkbox" name="is_admin" id="adminCheck">
+    <input class="form-check-input" type="checkbox" name="is_admin" id="adminCheck"
+      {% if request.form.get('is_admin') %}checked{% endif %}>
     <label class="form-check-label" for="adminCheck">管理者権限を付与</label>
   </div>
   <button type="submit" class="btn btn-success">作成</button>
 </form>
+
+<script>
+function togglePwd(id, btn) {
+  const field = document.getElementById(id);
+  if (field.type === "password") {
+    field.type = "text";
+    btn.innerText = "🙈";
+  } else {
+    field.type = "password";
+    btn.innerText = "👁";
+  }
+}
+</script>
 {% endblock %}
