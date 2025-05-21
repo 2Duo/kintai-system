@@ -5,16 +5,16 @@
 
 ---
 
-## 🔧 機能一覧
+## 機能一覧
 
-### 👤 一般ユーザー機能
+### 一般ユーザー機能
 - ログイン（メール + パスワード）
 - 出退勤の手動打刻（時間入力可能、業務内容記録付き）
 - 月間勤怠の閲覧・編集（1日1出勤・1退勤）
 - 勤怠データのCSVインポート（確認ダイアログで差分選択）
 - パスワードの変更
 
-### 🚰 管理者機能
+### 管理者機能
 - ユーザー作成・編集・削除
 - 管理対象ユーザーの設定（任意）
 - 毎月5日のCSV自動生成（残業時間を含む）
@@ -24,7 +24,7 @@
 
 ---
 
-## 📁 ディレクトリ構成
+## ディレクトリ構成
 ```
 kintai-system/
 ├── app.py # Flaskアプリ本体
@@ -67,7 +67,7 @@ gunicornで起動（確認用）
 ```
 venv/bin/gunicorn -w 4 -b 0.0.0.0:8000 app:app
 ```
-systemd サービスファイル /etc/systemd/system/kintai.service
+systemd サービスファイル `/etc/systemd/system/kintai.service`
 ```ini
 [Unit]
 Description=Kintai System Flask App
