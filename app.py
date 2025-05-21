@@ -548,7 +548,7 @@ def list_users():
     admin_id = session['user_id']
     conn = get_db()
     c = conn.cursor()
-    c.execute("SELECT id, name, email, is_admin FROM users ORDER BY name")
+    c.execute("SELECT id, name, email, is_admin, is_superadmin FROM users ORDER BY name")
     all_users = c.fetchall()
     c.execute("SELECT user_id FROM admin_managed_users WHERE admin_id = ?", (admin_id,))
     managed_ids = {row['user_id'] for row in c.fetchall()}
@@ -587,8 +587,7 @@ def create_user():
         conn = get_db()
         c = conn.cursor()
         try:
-            c.execute("INSERT INTO users (name, email, password_hash, is_admin) VALUES (?, ?, ?, ?)",
-                      (name, email, password_hash, is_admin))
+            c.execute("INSERT INTO users (name, email, password_hash, is_admin, is_superadmin) VALUES (?, ?, ?, ?, 0)",(name, email, password_hash, is_admin))
             conn.commit()
         except sqlite3.IntegrityError:
             conn.close()
@@ -621,12 +620,19 @@ def update_managed_users():
 def edit_user(user_id):
     conn = get_db()
     c = conn.cursor()
+    c.execute("SELECT name, email, is_admin, overtime_threshold, is_superadmin FROM users WHERE id = ?", (user_id,))
+    user = c.fetchone()
+    if not user:
+        conn.close()
+        flash("ユーザーが見つかりません。", "danger")
+        return redirect(url_for('list_users'))
+
     if request.method == 'POST':
         if not check_csrf():
             return redirect(url_for('edit_user', user_id=user_id))
         name = request.form['name'].strip()
         email = request.form['email'].strip()
-        is_admin = int('is_admin' in request.form)
+        is_admin = 1 if user['is_superadmin'] else int('is_admin' in request.form)
         overtime_threshold = request.form.get('overtime_threshold', '18:00').strip()
         new_password = request.form.get('new_password', '').strip()
         errors = []
@@ -654,8 +660,7 @@ def edit_user(user_id):
             flash("このメールアドレスは既に登録されています。", "danger")
         conn.close()
         return redirect(url_for('list_users'))
-    c.execute("SELECT name, email, is_admin, overtime_threshold FROM users WHERE id = ?", (user_id,))
-    user = c.fetchone()
+
     conn.close()
     return render_template('edit_user.html', user_id=user_id, user=user)
 
@@ -664,8 +669,18 @@ def edit_user(user_id):
 def delete_user(user_id):
     if not check_csrf():
         return redirect(url_for('list_users'))
+    # 自分自身の削除は禁止
+    if user_id == session.get('user_id'):
+        flash("自分自身のアカウントは削除できません。", "danger")
+        return redirect(url_for('list_users'))
     conn = get_db()
     c = conn.cursor()
+    c.execute("SELECT is_superadmin FROM users WHERE id = ?", (user_id,))
+    row = c.fetchone()
+    if row and row["is_superadmin"]:
+        flash("スーパー管理者は削除できません。", "danger")
+        conn.close()
+        return redirect(url_for('list_users'))
     c.execute("DELETE FROM users WHERE id = ?", (user_id,))
     conn.commit()
     conn.close()
@@ -699,7 +714,7 @@ def setup():
             conn.close()
             return redirect(url_for('setup'))
         password_hash = generate_password_hash(password)
-        c.execute("INSERT INTO users (email, name, password_hash, is_admin) VALUES (?, ?, ?, 1)", (email, name, password_hash))
+        c.execute("INSERT INTO users (email, name, password_hash, is_admin, is_superadmin) VALUES (?, ?, ?, 1, 1)",(email, name, password_hash))
         conn.commit()
         conn.close()
         return redirect(url_for('login'))

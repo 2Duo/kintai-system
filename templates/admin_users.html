@@ -5,14 +5,13 @@
 <h2 class="mb-3">ユーザー一覧</h2>
 
 <form method="POST" action="{{ url_for('update_managed_users') }}">
-  <!-- CSRFトークン追加 -->
   <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
   <div class="d-grid mb-3">
     <a class="btn btn-success" href="{{ url_for('create_user') }}">＋ 新規ユーザー作成</a>
   </div>
 
-  <div class="table-responsive">
-    <table class="table table-bordered align-middle text-nowrap">
+  <div class="table-responsive" style="max-width: fit-content; margin: 0 auto;">
+    <table class="table table-bordered align-middle text-nowrap" style="width: auto; min-width: 600px;">
       <thead class="table-light">
         <tr>
           <th>氏名</th>
@@ -27,20 +26,36 @@
         <tr>
           <td>{{ user["id_name"][1] }}</td>
           <td>{{ user["id_name"][2] }}</td>
-          <td>{{ '管理者' if user["id_name"][3] else '一般' }}</td>
+          <td>
+            {% if user["id_name"][4] %}
+              スーパー管理者
+            {% elif user["id_name"][3] %}
+              管理者
+            {% else %}
+              一般
+            {% endif %}
+          </td>
           <td class="text-center">
             <input type="checkbox" name="managed_users" value="{{ user["id_name"][0] }}"
-              {% if user["is_managed"] %}checked{% endif %}>
+              {% if user["is_managed"] %}checked{% endif %}
+              {% if user["id_name"][4] %}disabled{% endif %}>
           </td>
           <td>
-            <div class="d-flex flex-column gap-1">
-              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('edit_user', user_id=user["id_name"][0]) }}">編集</a>
-              <form method="POST" action="{{ url_for('delete_user', user_id=user['id_name'][0]) }}"
-                    onsubmit="return confirm('本当に削除しますか？');">
-                <!-- 削除ボタン用CSRFトークン追加 -->
-                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-                <button class="btn btn-sm btn-outline-danger">削除</button>
-              </form>
+            <div class="d-flex flex-column gap-1 align-items-start">
+              {% if user["id_name"][4] %}
+                <span class="text-muted small d-block py-1" style="min-width:90px;">変更不可</span>
+              {% elif user["id_name"][0] == session["user_id"] %}
+                <a class="btn btn-sm btn-outline-primary mb-1" href="{{ url_for('edit_user', user_id=user["id_name"][0]) }}" style="min-width:90px;">編集</a>
+                <span class="text-muted small d-block py-1" style="min-width:90px;">自分自身は削除できません</span>
+              {% else %}
+                <a class="btn btn-sm btn-outline-primary mb-1" href="{{ url_for('edit_user', user_id=user["id_name"][0]) }}" style="min-width:90px;">編集</a>
+                <form method="POST" action="{{ url_for('delete_user', user_id=user['id_name'][0]) }}"
+                      onsubmit="return confirm('本当に削除しますか？');"
+                      class="m-0" style="min-width:90px;">
+                  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                  <button class="btn btn-sm btn-outline-danger" type="submit" style="min-width:90px;">削除</button>
+                </form>
+              {% endif %}
             </div>
           </td>
         </tr>

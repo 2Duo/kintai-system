@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
     name TEXT NOT NULL,
     password_hash TEXT NOT NULL,
     is_admin INTEGER DEFAULT 0,
+    is_superadmin INTEGER DEFAULT 0,        -- ★スーパー管理者フラグ追加
     overtime_threshold TEXT DEFAULT '18:00'
 );
 

@@ -4,7 +4,6 @@
 {% block content %}
 <h2>ユーザー編集</h2>
 <form method="POST">
-  <!-- CSRFトークン追加 -->
   <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
   <div class="mb-3">
     <label class="form-label">氏名</label>
@@ -22,10 +21,17 @@
     <label class="form-label">新しいパスワード（空欄なら変更なし）</label>
     <input type="password" name="new_password" class="form-control">
   </div>
+  {% if not user[4] %}
   <div class="form-check mb-3">
     <input class="form-check-input" type="checkbox" name="is_admin" id="adminCheck" {% if user[2] %}checked{% endif %}>
     <label class="form-check-label" for="adminCheck">管理者権限を付与</label>
   </div>
+  {% else %}
+  <div class="mb-3">
+    <span class="badge bg-secondary">スーパー管理者</span>
+    <span class="text-muted ms-2">管理者権限は変更できません</span>
+  </div>
+  {% endif %}
   <button type="submit" class="btn btn-primary">更新</button>
 </form>
 {% endblock %}
