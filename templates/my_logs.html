@@ -4,6 +4,15 @@
 {% block content %}
 <h2>勤怠履歴</h2>
 
+<!-- ▼ CSVテンプレートダウンロードボタンを追加 -->
+<div class="mb-3">
+  <a href="{{ url_for('static', filename='テンプレート.csv') }}"
+     class="btn btn-outline-secondary btn-sm">
+    CSVテンプレートをダウンロード
+  </a>
+  <span class="ms-2 text-muted small">ヘッダー行は変更しないでください</span>
+</div>
+
 <div class="table-responsive">  <!-- 横スクロール対応 -->
   <table class="table table-bordered align-middle text-nowrap">
     <thead class="table-light">
@@ -36,7 +45,6 @@
 </div>
 
 <form action="{{ url_for('import_csv') }}" method="POST" enctype="multipart/form-data" class="mt-4">
-  <!-- CSRFトークン追加 -->
   <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
   <div class="mb-3">
     <label class="form-label">CSVファイルを選択</label>
