@@ -13,6 +13,7 @@
 - 月間勤怠の閲覧・編集（1日1出勤・1退勤）
 - 勤怠データのCSVインポート（確認ダイアログで差分選択）
 - パスワードの変更
+- スマホ・タブレットからの利用／PWAホーム追加
 
 ### 管理者機能
 - ユーザー作成・編集・削除
@@ -29,12 +30,16 @@
 kintai-system/
 ├── app.py # Flaskアプリ本体
 ├── database/
-│   ├── kintai.db # SQLite DBの実データ
-│   └── schema.sql # テーブル定義
+│ ├── kintai.db # SQLite DBの実データ
+│ └── schema.sql # テーブル定義
 ├── exports/ # 出力CSVの保存先
 ├── templates/ # HTMLテンプレート
 ├── static/
-│   └── style.css # スタイルシート
+│ ├── style.css # スタイルシート
+│ ├── manifest.json # PWA用マニフェスト
+│ ├── sw.js # サービスワーカー
+│ ├── icon-192.png # PWA用アイコン
+│ └── icon-512.png # PWA用アイコン
 ├── .env.example # 環境変数サンプル（公開可）
 └── README.md
 ```
@@ -54,8 +59,11 @@ pip install -r requirements.txt
 cp .env.example .env
 # .env内のSECRET_KEYは必ず独自のランダム値に変更してください
 
-python app.py  # 開発用（localhost:5000）
+python app.py  # デフォルトでLAN内全デバイスからアクセス可（http://自分のIPアドレス:8000）
 ```
+
+- 自分のPCのIPアドレスを確認し、同じネットワーク上のデバイスから`http://<IPアドレス>:8000`でアクセスできます。
+- (`app.py`の最後が`app.run(host='0.0.0.0', port=8000, debug=True)`であることを確認)
 
 ---
 
@@ -80,6 +88,14 @@ GitHub等にアップロードする際は、`.env`は**絶対に公開しない
 
 - `python-dotenv` を `requirements.txt` に含めています。
 - アプリ起動時、`.env`の`SECRET_KEY`が自動でセットされます。
+
+---
+
+## PWA（ホーム画面追加・オフライン対応）について
+- manifest.json, sw.js, アイコン画像（192px/512px）をstaticディレクトリに配置済み
+- base.htmlにPWA用のタグ・スクリプトが挿入済み
+- HTTPSでアクセスすると「ホーム画面に追加」や「インストール」が有効
+- 一部ページ・静的リソースはオフラインでも閲覧可（sw.jsでキャッシュ制御）
 
 ---
 
@@ -121,6 +137,7 @@ GitHub等にアップロードする際は、`.env`は**絶対に公開しない
 
 - 勤務時間合計の表示
 - 監査ログの記録（IP・端末など）
+- PWAのオフライン機能拡充（例：オフライン打刻→復帰時同期）
 
 ---
 
@@ -130,6 +147,8 @@ GitHub等にアップロードする際は、`.env`は**絶対に公開しない
 - Flask
 - SQLite3
 - Bootstrap5（UIフレームワーク）
+- PWA（manifest, service worker, アイコン）
+- ChatGPT
 
 ---
 
