@@ -29,12 +29,12 @@
 kintai-system/
 ├── app.py # Flaskアプリ本体
 ├── database/
-│ ├── kintai.db # SQLite DBの実データ
-│ └── schema.sql # テーブル定義
+│   ├── kintai.db # SQLite DBの実データ
+│   └── schema.sql # テーブル定義
 ├── exports/ # 出力CSVの保存先
 ├── templates/ # HTMLテンプレート
 ├── static/
-│ └── style.css # スタイルシート
+│   └── style.css # スタイルシート
 └── README.md
 ```
 
@@ -88,6 +88,33 @@ sudo systemctl daemon-reload
 sudo systemctl enable kintai
 sudo systemctl start kintai
 ```
+
+---
+
+## セキュリティ・運用上の注意
+
+- **必ずSECRET_KEYを環境変数で安全に管理してください。**
+    - `.env`ファイルや、systemdサービスの`Environment=`等で渡すことを推奨
+    - 例:  
+      ```bash
+      export SECRET_KEY='ランダムな長い値'
+      ```
+- **すべてのPOSTフォームにはCSRFトークンが自動挿入されます。**
+- **ファイルアップロード（CSV）の拡張子制限・最大サイズ制限が有効です。**
+    - デフォルトでは10MB以内推奨、app.pyの`allowed_file`参照
+- **パスワードは8文字以上を必須とし、ハッシュ化保存しています。**
+- **管理画面のアクセス権限制御が有効です。**
+- **本番運用時は必ずHTTPS（SSL/TLS）で運用してください。**
+- **DB・エクスポートCSV・ログなどは外部に漏れないようパーミッション管理を厳格に。**
+
+---
+
+## 環境変数例
+
+- `SECRET_KEY` ... Flaskセッション保護用（本番ではランダムな値に必ず変更）
+- `DB_PATH` ... SQLiteデータベースパス（必要に応じて環境ごとに変更）
+
+---
 
 ## CSV仕様
 

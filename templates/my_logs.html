@@ -36,6 +36,8 @@
 </div>
 
 <form action="{{ url_for('import_csv') }}" method="POST" enctype="multipart/form-data" class="mt-4">
+  <!-- CSRFトークン追加 -->
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
   <div class="mb-3">
     <label class="form-label">CSVファイルを選択</label>
     <input type="file" name="file" class="form-control" accept=".csv" required>

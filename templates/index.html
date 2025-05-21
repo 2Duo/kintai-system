@@ -5,6 +5,8 @@
 {% block content %}
 <h2>勤怠打刻</h2>
 <form method="POST" action="{{ url_for('punch') }}" onkeydown="return event.key !== 'Enter';">
+  <!-- CSRFトークン追加 -->
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
   <div class="mb-3">
     <label for="timestamp" class="form-label">日付と時刻</label>
     <input type="datetime-local" class="form-control" name="timestamp" id="timestamp" required>

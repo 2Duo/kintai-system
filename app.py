@@ -1,21 +1,79 @@
-from flask import Flask, render_template, request, redirect, url_for, session, send_file, flash
+from flask import Flask, render_template, request, redirect, url_for, session, send_file, flash, abort
 import sqlite3
 from datetime import datetime, timedelta
 import os
 import csv
-from io import StringIO, BytesIO, TextIOWrapper
+from io import TextIOWrapper
 from werkzeug.security import generate_password_hash, check_password_hash
 from collections import defaultdict
 import tempfile
 import zipfile
+import re
+import secrets
+from functools import wraps
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key_here'
+app.secret_key = os.environ.get('SECRET_KEY', 'your_secret_key_here')  # 本番は環境変数
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'database', 'kintai.db')
 EXPORT_DIR = os.path.join(os.path.dirname(__file__), 'exports')
 os.makedirs(EXPORT_DIR, exist_ok=True)
 
+# === 1. 共通DBコネクション関数 ===
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+# === 2. バリデーション関数 ===
+def is_valid_email(email):
+    return bool(re.match(r'^[^@]+@[^@]+\.[^@]+$', email))
+
+def is_valid_time(time_str):
+    try:
+        datetime.strptime(time_str, '%H:%M')
+        return True
+    except ValueError:
+        return False
+
+# === 3. CSRFトークン管理 ===
+def generate_csrf_token():
+    if '_csrf_token' not in session:
+        session['_csrf_token'] = secrets.token_hex(16)
+    return session['_csrf_token']
+app.jinja_env.globals['csrf_token'] = generate_csrf_token
+
+def check_csrf():
+    if request.method == 'POST':
+        token = request.form.get('_csrf_token')
+        if not token or session.get('_csrf_token') != token:
+            flash("セッションエラーが発生しました。やり直してください。", "danger")
+            return False
+    return True
+
+# === 4. ログイン/権限チェックデコレーター ===
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated
+
+def admin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('is_admin'):
+            return 'アクセス拒否'
+        return f(*args, **kwargs)
+    return decorated
+
+# === 5. ファイル検証 ===
+ALLOWED_EXTENSIONS = {'csv'}
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# === 6. DB初期化 ===
 def initialize_database():
     if not os.path.exists(DB_PATH):
         os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
@@ -24,9 +82,9 @@ def initialize_database():
             conn.executescript(f.read())
         conn.commit()
         conn.close()
-
 initialize_database()
 
+# === 7. 各種ユーティリティ ===
 def safe_fromisoformat(ts):
     try:
         return datetime.fromisoformat(ts)
@@ -40,67 +98,60 @@ def safe_fromisoformat(ts):
         return datetime.fromisoformat(ts)
 
 def normalize_time_str(time_str):
-    # 例: "9:00" → "09:00"
     try:
         dt = datetime.strptime(time_str, '%H:%M')
         return dt.strftime('%H:%M')
     except ValueError:
-        return time_str  # パースできない場合はそのまま返す
+        return time_str
 
-def generate_monthly_csv(year: int, month: int):
-    conn = sqlite3.connect(DB_PATH)
+# === 8. CSV出力ロジック一本化 ===
+def generate_csv(user_id, name, year, month, target_dir, overtime_threshold='18:00'):
+    conn = get_db()
     c = conn.cursor()
     start = datetime(year, month, 1)
-    end = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
-
-    c.execute("SELECT id, name, overtime_threshold FROM users")
-    users = c.fetchall()
-
-    for user_id, name, overtime_threshold in users:
-        c.execute("""
-            SELECT timestamp, type, description FROM attendance
-            WHERE user_id = ? AND timestamp >= ? AND timestamp < ?
-            ORDER BY timestamp ASC
-        """, (user_id, start.isoformat(), end.isoformat()))
-        rows = c.fetchall()
-        if not rows:
-            continue
-
-        daily_data = defaultdict(lambda: {'in': None, 'out': None, 'description': ''})
-        for ts, typ, desc in rows:
-            dt = safe_fromisoformat(ts)
-            day = dt.strftime('%Y/%m/%d')
-            time = dt.strftime('%H:%M')
-            if typ == 'in':
-                daily_data[day]['in'] = time
-            elif typ == 'out':
-                daily_data[day]['out'] = time
-            if typ == 'out' and desc:
-                daily_data[day]['description'] = desc
-
-        filename = f"{name}_{year}_{month:02d}_勤怠記録.csv"
-        filepath = os.path.join(EXPORT_DIR, filename)
-        with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
-            writer = csv.writer(f)
-            writer.writerow(['日付', '曜日', '出勤時刻', '退勤時刻', '業務内容', '残業時間'])
-
-            for day in sorted(daily_data):
-                data = daily_data[day]
-                dt = datetime.strptime(day, '%Y/%m/%d')
-                weekday = '月火水木金土日'[dt.weekday()]
-                overtime = ''
-                if data['out']:
-                    try:
-                        out_dt = datetime.strptime(data['out'], '%H:%M')
-                        th_dt = datetime.strptime(overtime_threshold or '18:00', '%H:%M')
-                        if out_dt > th_dt:
-                            delta = out_dt - th_dt
-                            h, m = divmod(delta.seconds // 60, 60)
-                            overtime = f"{h:02d}:{m:02d}"
-                    except:
-                        pass
-                writer.writerow([day, weekday, data['in'], data['out'], data['description'], overtime])
+    end = (start.replace(day=28) + timedelta(days=4)).replace(day=1)
+    c.execute("""
+        SELECT timestamp, type, description FROM attendance
+        WHERE user_id = ? AND timestamp >= ? AND timestamp < ?
+        ORDER BY timestamp ASC
+    """, (user_id, start.isoformat(), end.isoformat()))
+    rows = c.fetchall()
     conn.close()
+    if not rows:
+        return None
+    daily_data = defaultdict(lambda: {'in': '', 'out': '', 'description': ''})
+    for row in rows:
+        ts, typ, desc = row
+        dt = safe_fromisoformat(ts)
+        day = dt.strftime('%Y/%m/%d')
+        time = dt.strftime('%H:%M')
+        if typ == 'in':
+            daily_data[day]['in'] = time
+        elif typ == 'out':
+            daily_data[day]['out'] = time
+            daily_data[day]['description'] = desc or ''
+    filename = f"{name}_{year}_{month:02d}_勤怠記録.csv"
+    filepath = os.path.join(target_dir, filename)
+    with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
+        writer = csv.writer(f)
+        writer.writerow(['日付', '曜日', '出勤時刻', '退勤時刻', '業務内容', '残業時間'])
+        for day in sorted(daily_data):
+            data = daily_data[day]
+            dt = datetime.strptime(day, '%Y/%m/%d')
+            weekday = '月火水木金土日'[dt.weekday()]
+            overtime = ''
+            if data['out']:
+                try:
+                    out_dt = datetime.strptime(data['out'], '%H:%M')
+                    th_dt = datetime.strptime(overtime_threshold or '18:00', '%H:%M')
+                    if out_dt > th_dt:
+                        delta = out_dt - th_dt
+                        h, m = divmod(delta.seconds // 60, 60)
+                        overtime = f"{h:02d}:{m:02d}"
+                except:
+                    pass
+            writer.writerow([day, weekday, data['in'], data['out'], data['description'], overtime])
+    return filepath
 
 def delete_old_exports(base_dir='exports', days=30):
     threshold = datetime.now() - timedelta(days=days)
@@ -110,48 +161,77 @@ def delete_old_exports(base_dir='exports', days=30):
             if os.path.isfile(path) and os.path.getmtime(path) < threshold.timestamp():
                 os.remove(path)
 
+# === 9. 初回起動時セットアップ画面リダイレクト ===
 @app.before_request
 def redirect_to_setup_if_first_run():
     if request.endpoint in ('static', 'setup'):
-        return  # CSS や setup 自体には適用しない
-
-    conn = sqlite3.connect(DB_PATH)
+        return
+    conn = get_db()
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM users")
     count = c.fetchone()[0]
     conn.close()
-
     if count == 0:
         return redirect(url_for('setup'))
 
-@app.route('/punch', methods=['POST'])
-def punch():
-    if 'user_id' not in session:
+# === 10. 各route ===
+
+@app.route('/')
+@login_required
+def index():
+    return render_template('index.html', user_name=session['user_name'])
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        if not check_csrf():
+            return redirect(url_for('login'))
+        email = request.form['email']
+        password = request.form['password']
+        conn = get_db()
+        c = conn.cursor()
+        c.execute("SELECT id, name, password_hash, is_admin FROM users WHERE email = ?", (email,))
+        user = c.fetchone()
+        conn.close()
+        if user and check_password_hash(user['password_hash'], password):
+            session['user_id'] = user['id']
+            session['user_name'] = user['name']
+            session['is_admin'] = bool(user['is_admin'])
+            return redirect(url_for('index'))
+        flash("メールアドレスまたはパスワードが正しくありません。", "danger")
         return redirect(url_for('login'))
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
+@app.route('/punch', methods=['POST'])
+@login_required
+def punch():
+    if not check_csrf():
+        return redirect(url_for('index'))
     user_id = session['user_id']
     timestamp = request.form['timestamp']
     punch_type = request.form['type']
     description = request.form.get('description', '')
-
-    day = timestamp[:10]  # YYYY-MM-DD
-    conn = sqlite3.connect(DB_PATH)
+    day = timestamp[:10]
+    conn = get_db()
     c = conn.cursor()
-
     c.execute("""
         SELECT timestamp, description FROM attendance 
         WHERE user_id = ? AND type = ? AND substr(timestamp, 1, 10) = ?
     """, (user_id, punch_type, day))
     existing = c.fetchone()
     conn.close()
-
     if existing:
         return render_template('confirm_punch.html', existing={
-        'timestamp': existing[0], 'description': existing[1]
-    }, incoming={
-        'timestamp': timestamp, 'description': description
-    }, punch_type=punch_type, day=day, referer=request.referrer or url_for('index'))
-
-    conn = sqlite3.connect(DB_PATH)
+            'timestamp': existing['timestamp'], 'description': existing['description']
+        }, incoming={
+            'timestamp': timestamp, 'description': description
+        }, punch_type=punch_type, day=day, referer=request.referrer or url_for('index'))
+    conn = get_db()
     c = conn.cursor()
     c.execute("INSERT INTO attendance (user_id, timestamp, type, description) VALUES (?, ?, ?, ?)",
               (user_id, timestamp, punch_type, description))
@@ -161,19 +241,18 @@ def punch():
     return redirect(referer)
 
 @app.route('/punch/resolve', methods=['POST'])
+@login_required
 def resolve_punch():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
+    if not check_csrf():
+        return redirect(url_for('index'))
     user_id = session['user_id']
     action = request.form['action']
     day = request.form['day']
     punch_type = request.form['type']
     timestamp = request.form['timestamp']
     description = request.form.get('description', '')
-
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     c = conn.cursor()
-
     if action == 'overwrite':
         c.execute("DELETE FROM attendance WHERE user_id = ? AND type = ? AND substr(timestamp, 1, 10) = ?",
                   (user_id, punch_type, day))
@@ -184,76 +263,67 @@ def resolve_punch():
     return redirect(url_for('index'))
 
 @app.route('/exports/<filename>')
+@admin_required
 def download_export_file(filename):
-    if not session.get('is_admin'):
-        return 'アクセス拒否'
     filepath = os.path.join(EXPORT_DIR, filename)
     if not os.path.isfile(filepath):
         return 'ファイルが存在しません'
     return send_file(filepath, as_attachment=True, mimetype='text/csv')
 
 @app.route('/my/password', methods=['GET', 'POST'])
+@login_required
 def change_password():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
     user_id = session['user_id']
-
     if request.method == 'POST':
+        if not check_csrf():
+            return redirect(url_for('change_password'))
         current = request.form['current_password']
         new = request.form['new_password']
         confirm = request.form['confirm_password']
-
         if new != confirm:
             flash("新しいパスワードが一致しません。", "danger")
             return redirect(url_for('change_password'))
-
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         c = conn.cursor()
         c.execute("SELECT password_hash FROM users WHERE id = ?", (user_id,))
         row = c.fetchone()
-        if not row or not check_password_hash(row[0], current):
+        if not row or not check_password_hash(row['password_hash'], current):
             conn.close()
             flash("現在のパスワードが正しくありません。", "danger")
             return redirect(url_for('change_password'))
-
         new_hash = generate_password_hash(new)
         c.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user_id))
         conn.commit()
         conn.close()
         flash("パスワードを更新しました。", "success")
         return redirect(url_for('index'))
-
     return render_template('change_password.html')
 
 @app.route('/my/import', methods=['POST'])
+@login_required
 def import_csv():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-
+    if not check_csrf():
+        return redirect(url_for('view_my_logs'))
     user_id = session['user_id']
     uploaded_file = request.files['file']
-    if not uploaded_file or not uploaded_file.filename.endswith('.csv'):
-        flash("CSVファイルを選択してください。", "danger")
+    if not uploaded_file or not allowed_file(uploaded_file.filename):
+        flash("CSVファイルのみアップロードできます。", "danger")
         return redirect(url_for('view_my_logs'))
-
     try:
         temp_csv = TextIOWrapper(uploaded_file.stream, encoding='utf-8-sig')
         reader = csv.DictReader(temp_csv)
     except Exception:
         flash("CSVファイルの読み込みに失敗しました。フォーマットを確認してください。", "danger")
         return redirect(url_for('view_my_logs'))
-
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     c = conn.cursor()
-
-    # 既存データの読み込み
     c.execute("SELECT timestamp, type, description FROM attendance WHERE user_id = ?", (user_id,))
     existing = defaultdict(dict)
-    for ts, typ, desc in c.fetchall():
+    for row in c.fetchall():
+        ts, typ, desc = row
         dt = safe_fromisoformat(ts)
         day = dt.strftime('%Y-%m-%d')
         existing[day][typ] = (ts, desc)
-
     incoming = defaultdict(dict)
     try:
         for row in reader:
@@ -269,8 +339,6 @@ def import_csv():
         conn.close()
         flash("CSVデータの形式が正しくありません。日付・時刻形式を確認してください。", "danger")
         return redirect(url_for('view_my_logs'))
-
-    # 衝突検出
     conflicts = []
     for day in incoming:
         for typ in incoming[day]:
@@ -281,8 +349,6 @@ def import_csv():
                     'existing': existing[day][typ],
                     'incoming': incoming[day][typ]
                 })
-
-    # 衝突なし → DB反映
     if not conflicts:
         for day in incoming:
             for typ in ['in', 'out']:
@@ -296,83 +362,64 @@ def import_csv():
         conn.close()
         flash("CSVインポートが完了しました。", "success")
         return redirect(url_for('view_my_logs'))
-
-    # 衝突あり → 確認画面へ
     conn.close()
     return render_template('resolve_conflicts.html', conflicts=conflicts, incoming=incoming, user_id=user_id, referer=request.referrer or url_for('view_my_logs'))
 
 @app.route('/my/import/resolve', methods=['POST'])
+@login_required
 def resolve_conflicts():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
+    if not check_csrf():
+        return redirect(url_for('view_my_logs'))
     user_id = session['user_id']
     referer = request.form.get('referer', url_for('view_my_logs'))
-
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     c = conn.cursor()
-
     errors = []
     updated_count = 0
-
     for key, value in request.form.items():
         if key.startswith("choice_"):
             try:
                 _, day, typ = key.split("_", 2)
-                choice = value  # 'existing' or 'incoming'
-
+                choice = value
                 if choice == 'incoming':
                     ts_key = f"incoming_ts_{day}_{typ}"
                     desc_key = f"incoming_desc_{day}_{typ}"
-
                     if ts_key not in request.form or not request.form[ts_key].strip():
                         errors.append(f"{day} の {typ}：時刻が指定されていません。")
                         continue
-
                     ts = request.form[ts_key]
                     desc = request.form.get(desc_key, '')
-
-                    # 書き込み処理
                     c.execute("DELETE FROM attendance WHERE user_id = ? AND type = ? AND substr(timestamp, 1, 10) = ?",
                               (user_id, typ, day))
                     c.execute("INSERT INTO attendance (user_id, timestamp, type, description) VALUES (?, ?, ?, ?)",
                               (user_id, ts, typ, desc))
                     updated_count += 1
-
-            except Exception as e:
+            except Exception:
                 errors.append(f"{key} の処理中に予期しないエラーが発生しました。")
-
     conn.commit()
     conn.close()
-
     if errors:
         for msg in errors:
             flash(msg, "danger")
         return redirect(referer)
-
     flash(f"{updated_count} 件の勤怠データを更新しました。", "success")
-    return redirect(referer)          
+    return redirect(referer)
 
 @app.route('/my/logs')
+@login_required
 def view_my_logs():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-
     user_id = session['user_id']
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     c = conn.cursor()
-
-    # ユーザーの残業しきい時刻を取得（例: '18:00'）
     c.execute("SELECT overtime_threshold FROM users WHERE id = ?", (user_id,))
     row = c.fetchone()
-    overtime_threshold = row[0] if row else '18:00'
-
-    # 勤怠記録を取得
+    overtime_threshold = row['overtime_threshold'] if row else '18:00'
     c.execute("SELECT timestamp, type, description FROM attendance WHERE user_id = ? ORDER BY timestamp", (user_id,))
     records = c.fetchall()
     conn.close()
-
     attendance_by_day = {}
-    for ts, typ, desc in records:
+    for row in records:
+        ts, typ, desc = row
         dt = safe_fromisoformat(ts)
         date = dt.strftime('%Y-%m-%d')
         weekday = '月火水木金土日'[dt.weekday()]
@@ -380,8 +427,6 @@ def view_my_logs():
         if date not in attendance_by_day:
             attendance_by_day[date] = {'weekday': weekday, 'in': None, 'out': None, 'overtime': ''}
         attendance_by_day[date][typ] = {'time': time, 'description': desc}
-
-    # 残業時間を日別に算出
     for date, data in attendance_by_day.items():
         if data['out']:
             out_time = data['out']['time']
@@ -396,47 +441,37 @@ def view_my_logs():
                 data['overtime'] = ''
         else:
             data['overtime'] = ''
-
     return render_template('my_logs.html', logs=attendance_by_day)
 
 @app.route('/my/logs/edit/<date>', methods=['GET', 'POST'])
+@login_required
 def edit_log(date):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-
     user_id = session['user_id']
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     c = conn.cursor()
-
     if request.method == 'POST':
+        if not check_csrf():
+            return redirect(url_for('edit_log', date=date))
         in_time = request.form.get('in_time')
         out_time = request.form.get('out_time')
         description = request.form.get('description')
-
-        # 出勤削除＋再登録
         c.execute("DELETE FROM attendance WHERE user_id = ? AND type = 'in' AND substr(timestamp, 1, 10) = ?", (user_id, date))
         if in_time:
             c.execute("INSERT INTO attendance (user_id, timestamp, type, description) VALUES (?, ?, 'in', '')",
                       (user_id, f"{date}T{in_time}:00"))
-
-        # 退勤削除＋再登録
         c.execute("DELETE FROM attendance WHERE user_id = ? AND type = 'out' AND substr(timestamp, 1, 10) = ?", (user_id, date))
         if out_time:
             c.execute("INSERT INTO attendance (user_id, timestamp, type, description) VALUES (?, ?, 'out', ?)",
                       (user_id, f"{date}T{out_time}:00", description or ''))
-
         conn.commit()
         conn.close()
         return redirect(url_for('view_my_logs'))
-
-    # GET時は既存データを表示
     c.execute("""
         SELECT type, substr(timestamp, 12, 5), description FROM attendance
         WHERE user_id = ? AND substr(timestamp, 1, 10) = ?
     """, (user_id, date))
     rows = c.fetchall()
     conn.close()
-
     in_time = out_time = description = ''
     for typ, time, desc in rows:
         if typ == 'in':
@@ -444,49 +479,13 @@ def edit_log(date):
         elif typ == 'out':
             out_time = time
             description = desc or ''
-
     return render_template('edit_log.html', date=date, in_time=in_time, out_time=out_time, description=description)
 
-@app.route('/')
-def index():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    return render_template('index.html', user_name=session['user_name'])
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        email = request.form['email']
-        password = request.form['password']
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("SELECT id, name, password_hash, is_admin FROM users WHERE email = ?", (email,))
-        user = c.fetchone()
-        conn.close()
-
-        if user and check_password_hash(user[2], password):
-            session['user_id'] = user[0]
-            session['user_name'] = user[1]
-            session['is_admin'] = bool(user[3])
-            return redirect(url_for('index'))
-
-        flash("メールアドレスまたはパスワードが正しくありません。", "danger")
-        return redirect(url_for('login'))
-
-    return render_template('login.html')
-
-@app.route('/logout')
-def logout():
-    session.clear()
-    return redirect(url_for('login'))
-
 @app.route('/admin/export', methods=['GET', 'POST'])
+@admin_required
 def export_combined():
-    if not session.get('is_admin'):
-        return 'アクセス拒否'
     admin_id = session['user_id']
-
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     c = conn.cursor()
     c.execute("""
         SELECT u.id, u.name FROM users u
@@ -496,139 +495,90 @@ def export_combined():
     """, (admin_id,))
     user_list = c.fetchall()
     conn.close()
-
     now = datetime.now()
     years = list(range(now.year - 3, now.year + 2))
-
     if request.method == 'POST':
+        if not check_csrf():
+            return redirect(url_for('export_combined'))
         year = int(request.form['year'])
         month = int(request.form['month'])
-        start = datetime(year, month, 1)
-        end = (start.replace(day=28) + timedelta(days=4)).replace(day=1)
-
-        def generate_csv_for(user_id, name, target_dir):
-            conn = sqlite3.connect(DB_PATH)
+        def get_overtime_threshold(uid):
+            conn = get_db()
             c = conn.cursor()
-
-            # 残業しきい時刻を取得（デフォルト: '18:00'）
-            c.execute("SELECT overtime_threshold FROM users WHERE id = ?", (user_id,))
+            c.execute("SELECT overtime_threshold FROM users WHERE id = ?", (uid,))
             row = c.fetchone()
-            overtime_threshold = row[0] if row and row[0] else '18:00'
-
-            c.execute("""
-                SELECT timestamp, type, description FROM attendance
-                WHERE user_id = ? AND timestamp >= ? AND timestamp < ?
-                ORDER BY timestamp ASC
-            """, (user_id, start.isoformat(), end.isoformat()))
-            rows = c.fetchall()
             conn.close()
-
-            if not rows:
-                return None
-
-            daily_data = defaultdict(lambda: {'in': '', 'out': '', 'description': ''})
-            for ts, typ, desc in rows:
-                dt = safe_fromisoformat(ts)
-                day = dt.strftime('%Y/%m/%d')
-                time = dt.strftime('%H:%M')
-                if typ == 'in':
-                    daily_data[day]['in'] = time
-                elif typ == 'out':
-                    daily_data[day]['out'] = time
-                    daily_data[day]['description'] = desc or ''
-
-            filename = f"{name}_{year}_{month:02d}_勤怠記録.csv"
-            filepath = os.path.join(target_dir, filename)
-            with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
-                writer = csv.writer(f)
-                writer.writerow(['日付', '曜日', '出勤時刻', '退勤時刻', '業務内容', '残業時間'])
-
-                for day in sorted(daily_data):
-                    data = daily_data[day]
-                    dt = datetime.strptime(day, '%Y/%m/%d')
-                    weekday = '月火水木金土日'[dt.weekday()]
-
-                    overtime = ''
-                    if data['out']:
-                        try:
-                            out_dt = datetime.strptime(data['out'], '%H:%M')
-                            th_dt = datetime.strptime(overtime_threshold, '%H:%M')
-                            if out_dt > th_dt:
-                                delta = out_dt - th_dt
-                                h, m = divmod(delta.seconds // 60, 60)
-                                overtime = f"{h:02d}:{m:02d}"
-                        except:
-                            pass
-
-                    writer.writerow([day, weekday, data['in'], data['out'], data['description'], overtime])
-
-            return filepath
-
+            return row['overtime_threshold'] if row and row['overtime_threshold'] else '18:00'
         if request.form['action'] == 'single_user':
             user_id = int(request.form['user_id'])
-            conn = sqlite3.connect(DB_PATH)
+            conn = get_db()
             c = conn.cursor()
             c.execute("SELECT name FROM users WHERE id = ?", (user_id,))
             row = c.fetchone()
             conn.close()
             if not row:
                 return 'ユーザーが見つかりません'
-            name = row[0]
-
+            name = row['name']
             export_subdir = os.path.join(EXPORT_DIR, f"{year}", f"{month:02d}")
             os.makedirs(export_subdir, exist_ok=True)
-            csv_path = generate_csv_for(user_id, name, export_subdir)
+            csv_path = generate_csv(user_id, name, year, month, export_subdir, get_overtime_threshold(user_id))
             if not csv_path:
                 return '該当データがありません'
             return send_file(csv_path, mimetype='text/csv', as_attachment=True, download_name=os.path.basename(csv_path))
-
         elif request.form['action'] == 'bulk_all':
             with tempfile.TemporaryDirectory() as temp_dir:
                 zip_path = os.path.join(temp_dir, f"勤怠記録_{year}_{month:02d}.zip")
                 with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                     for user_id, name in user_list:
-                        csv_file = generate_csv_for(user_id, name, temp_dir)
+                        csv_file = generate_csv(user_id, name, year, month, temp_dir, get_overtime_threshold(user_id))
                         if csv_file:
                             zipf.write(csv_file, os.path.basename(csv_file))
                 return send_file(zip_path, mimetype='application/zip', as_attachment=True, download_name=f"勤怠記録_{year}_{month:02d}.zip")
-
     return render_template('export.html', user_list=user_list, now=now, years=years)
 
 @app.route('/admin/users')
+@admin_required
 def list_users():
-    if not session.get('is_admin'):
-        return 'アクセス拒否'
     admin_id = session['user_id']
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     c = conn.cursor()
     c.execute("SELECT id, name, email, is_admin FROM users ORDER BY name")
     all_users = c.fetchall()
     c.execute("SELECT user_id FROM admin_managed_users WHERE admin_id = ?", (admin_id,))
-    managed_ids = {row[0] for row in c.fetchall()}
+    managed_ids = {row['user_id'] for row in c.fetchall()}
     conn.close()
-
     users = []
     for user in all_users:
         users.append({
             'id_name': user,
-            'is_managed': user[0] in managed_ids
+            'is_managed': user['id'] in managed_ids
         })
-
     return render_template('admin_users.html', users=users)
 
 @app.route('/admin/users/create', methods=['GET', 'POST'])
+@admin_required
 def create_user():
-    if not session.get('is_admin'):
-        return 'アクセス拒否'
-
     if request.method == 'POST':
-        name = request.form['name']
-        email = request.form['email']
+        if not check_csrf():
+            return redirect(url_for('create_user'))
+        name = request.form['name'].strip()
+        email = request.form['email'].strip()
         password = request.form['password']
         is_admin = int('is_admin' in request.form)
+        # バリデーション
+        errors = []
+        if not name:
+            errors.append("氏名を入力してください。")
+        if not is_valid_email(email):
+            errors.append("正しいメールアドレスを入力してください。")
+        if not password or len(password) < 8:
+            errors.append("パスワードは8文字以上で入力してください。")
+        if errors:
+            for msg in errors:
+                flash(msg, "danger")
+            return redirect(url_for('create_user'))
         password_hash = generate_password_hash(password)
-
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         c = conn.cursor()
         try:
             c.execute("INSERT INTO users (name, email, password_hash, is_admin) VALUES (?, ?, ?, ?)",
@@ -638,24 +588,21 @@ def create_user():
             conn.close()
             flash("このメールアドレスはすでに登録されています。", "danger")
             return redirect(url_for('create_user'))
-
         conn.close()
         flash("ユーザーを作成しました。", "success")
         return redirect(url_for('list_users'))
-
     return render_template('create_user.html')
 
 @app.route('/admin/users/manage', methods=['POST'])
+@admin_required
 def update_managed_users():
-    if not session.get('is_admin'):
-        return 'アクセス拒否'
+    if not check_csrf():
+        return redirect(url_for('list_users'))
     admin_id = session['user_id']
     selected_ids = request.form.getlist('managed_users')
     selected_ids = list(map(int, selected_ids))
-
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     c = conn.cursor()
-    # 一旦削除して再登録
     c.execute("DELETE FROM admin_managed_users WHERE admin_id = ?", (admin_id,))
     for user_id in selected_ids:
         c.execute("INSERT INTO admin_managed_users (admin_id, user_id) VALUES (?, ?)", (admin_id, user_id))
@@ -664,67 +611,54 @@ def update_managed_users():
     return redirect(url_for('list_users'))
 
 @app.route('/admin/users/edit/<int:user_id>', methods=['GET', 'POST'])
+@admin_required
 def edit_user(user_id):
-    if not session.get('is_admin'):
-        return 'アクセス拒否'
-
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     c = conn.cursor()
-
     if request.method == 'POST':
+        if not check_csrf():
+            return redirect(url_for('edit_user', user_id=user_id))
         name = request.form['name'].strip()
         email = request.form['email'].strip()
         is_admin = int('is_admin' in request.form)
         overtime_threshold = request.form.get('overtime_threshold', '18:00').strip()
         new_password = request.form.get('new_password', '').strip()
-
-        # バリデーション
         errors = []
         if not name:
             errors.append("氏名を入力してください。")
-        if not email or "@" not in email:
+        if not is_valid_email(email):
             errors.append("正しいメールアドレスを入力してください。")
-        try:
-            datetime.strptime(overtime_threshold, '%H:%M')
-        except ValueError:
-            errors.append("残業開始時刻は HH:MM 形式で入力してください。")
-
+        if overtime_threshold and not is_valid_time(overtime_threshold):
+            errors.append("残業カウント開始時刻は HH:MM 形式で入力してください。")
         if errors:
             for msg in errors:
                 flash(msg, "danger")
             conn.close()
             return redirect(url_for('edit_user', user_id=user_id))
-
-        # 更新処理（基本項目）
         try:
             c.execute("UPDATE users SET name = ?, email = ?, is_admin = ?, overtime_threshold = ? WHERE id = ?",
                       (name, email, is_admin, overtime_threshold, user_id))
-
-            # 新パスワードが入力されていたらハッシュ化して更新
             if new_password:
                 password_hash = generate_password_hash(new_password)
                 c.execute("UPDATE users SET password_hash = ? WHERE id = ?", (password_hash, user_id))
                 flash("パスワードを更新しました。", "success")
-
             conn.commit()
             flash("ユーザー情報を更新しました。", "success")
-
         except sqlite3.IntegrityError:
             flash("このメールアドレスは既に登録されています。", "danger")
-
         conn.close()
         return redirect(url_for('list_users'))
-
     c.execute("SELECT name, email, is_admin, overtime_threshold FROM users WHERE id = ?", (user_id,))
     user = c.fetchone()
     conn.close()
     return render_template('edit_user.html', user_id=user_id, user=user)
 
 @app.route('/admin/users/delete/<int:user_id>', methods=['POST'])
+@admin_required
 def delete_user(user_id):
-    if not session.get('is_admin'):
-        return 'アクセス拒否'
-    conn = sqlite3.connect(DB_PATH)
+    if not check_csrf():
+        return redirect(url_for('list_users'))
+    conn = get_db()
     c = conn.cursor()
     c.execute("DELETE FROM users WHERE id = ?", (user_id,))
     conn.commit()
@@ -733,7 +667,7 @@ def delete_user(user_id):
 
 @app.route('/setup', methods=['GET', 'POST'])
 def setup():
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM users")
     count = c.fetchone()[0]
@@ -741,9 +675,23 @@ def setup():
         conn.close()
         return redirect(url_for('login'))
     if request.method == 'POST':
+        if not check_csrf():
+            return redirect(url_for('setup'))
         name = request.form['name']
         email = request.form['email']
         password = request.form['password']
+        errors = []
+        if not name:
+            errors.append("氏名を入力してください。")
+        if not is_valid_email(email):
+            errors.append("正しいメールアドレスを入力してください。")
+        if not password or len(password) < 8:
+            errors.append("パスワードは8文字以上で入力してください。")
+        if errors:
+            for msg in errors:
+                flash(msg, "danger")
+            conn.close()
+            return redirect(url_for('setup'))
         password_hash = generate_password_hash(password)
         c.execute("INSERT INTO users (email, name, password_hash, is_admin) VALUES (?, ?, ?, 1)", (email, name, password_hash))
         conn.commit()

@@ -5,6 +5,8 @@
 <h2>{{ date }} の勤怠修正</h2>
 
 <form method="POST">
+  <!-- CSRFトークン追加 -->
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
   <div class="mb-3">
     <label for="in_time" class="form-label">出勤時刻</label>
     <input type="time" id="in_time" name="in_time" class="form-control" value="{{ in_time }}">

@@ -4,6 +4,8 @@
 {% block content %}
 <h2>新規ユーザー作成</h2>
 <form method="POST">
+  <!-- CSRFトークン追加 -->
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
   <div class="mb-3">
     <label class="form-label">氏名</label>
     <input type="text" name="name" class="form-control" required>
