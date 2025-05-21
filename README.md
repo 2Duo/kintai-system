@@ -35,6 +35,7 @@ kintai-system/
 ├── templates/ # HTMLテンプレート
 ├── static/
 │   └── style.css # スタイルシート
+├── .env.example # 環境変数サンプル（公開可）
 └── README.md
 ```
 
@@ -49,56 +50,43 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
+# .env.exampleをコピーして.envを作成・編集
+cp .env.example .env
+# .env内のSECRET_KEYは必ず独自のランダム値に変更してください
+
 python app.py  # 開発用（localhost:5000）
 ```
 
 ---
 
-## 初回セットアップ
+## .envファイルによるシークレット管理
 
-1. `http://localhost:5000/setup` にアクセス
-2. 管理者アカウントを作成
-3. ログイン後、ユーザー登録を実施
+このプロジェクトでは**重要なシークレット情報（SECRET_KEYなど）を.envファイルで管理**します。  
+**`.env.example`** が雛形として同梱されています。  
+GitHub等にアップロードする際は、`.env`は**絶対に公開しないでください**（`.gitignore`推奨）。
 
----
+### 1. .envファイルの作成方法
 
-## 本番環境での常時運用（systemd+gunicorn）
-gunicornで起動（確認用）
-```
-venv/bin/gunicorn -w 4 -b 0.0.0.0:8000 app:app
-```
-systemd サービスファイル `/etc/systemd/system/kintai.service`
-```ini
-[Unit]
-Description=Kintai System Flask App
-After=network.target
+1. `.env.example` をコピーして `.env` を作成します。
+2. 必ず `SECRET_KEY` の値を自分専用の安全なランダム値に**書き換えてください**。
+   - 例：  
+     ```
+     SECRET_KEY=9dc53ed3bfe2c5d4727e70a9af1c02a13b7c05efabc29cf147e3ddc17e02f889
+     ```
+   - この値は**絶対にそのまま本番運用せず、自分で新しく生成してください**。
+   - 生成例：Pythonで`import secrets; print(secrets.token_hex(32))`
 
-[Service]
-User=youruser
-WorkingDirectory=/home/youruser/kintai-system
-ExecStart=/home/youruser/kintai-system/venv/bin/gunicorn -w 4 -b 0.0.0.0:8000 app:app
-Restart=always
+### 2. Flaskアプリは起動時に自動で`.env`から環境変数を読み込みます
 
-[Install]
-WantedBy=multi-user.target
-```
-有効化と起動
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable kintai
-sudo systemctl start kintai
-```
+- `python-dotenv` を `requirements.txt` に含めています。
+- アプリ起動時、`.env`の`SECRET_KEY`が自動でセットされます。
 
 ---
 
 ## セキュリティ・運用上の注意
 
-- **必ずSECRET_KEYを環境変数で安全に管理してください。**
-    - `.env`ファイルや、systemdサービスの`Environment=`等で渡すことを推奨
-    - 例:  
-      ```bash
-      export SECRET_KEY='ランダムな長い値'
-      ```
+- **必ずSECRET_KEYを独自に生成し、.envファイルで安全に管理してください。**
+- `.env` は **Gitリポジトリに含めず、`.gitignore`で除外**してください（`.env.example`のみ公開可）。
 - **すべてのPOSTフォームにはCSRFトークンが自動挿入されます。**
 - **ファイルアップロード（CSV）の拡張子制限・最大サイズ制限が有効です。**
     - デフォルトでは10MB以内推奨、app.pyの`allowed_file`参照

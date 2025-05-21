@@ -11,9 +11,15 @@ import zipfile
 import re
 import secrets
 from functools import wraps
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your_secret_key_here')  # 本番は環境変数
+
+if not app.secret_key or app.secret_key == 'your_secret_key_here':
+    raise RuntimeError("SECRET_KEYを環境変数で必ず設定してください")
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'database', 'kintai.db')
 EXPORT_DIR = os.path.join(os.path.dirname(__file__), 'exports')
