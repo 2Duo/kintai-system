@@ -332,32 +332,6 @@ def change_password():
 
     return render_template('change_password.html', errors=errors)
 
-    user_id = session['user_id']
-    if request.method == 'POST':
-        if not check_csrf():
-            return redirect(url_for('change_password'))
-        current = request.form['current_password']
-        new = request.form['new_password']
-        confirm = request.form['confirm_password']
-        if new != confirm:
-            flash("新しいパスワードが一致しません。", "danger")
-            return redirect(url_for('change_password'))
-        conn = get_db()
-        c = conn.cursor()
-        c.execute("SELECT password_hash FROM users WHERE id = ?", (user_id,))
-        row = c.fetchone()
-        if not row or not check_password_hash(row['password_hash'], current):
-            conn.close()
-            flash("現在のパスワードが正しくありません。", "danger")
-            return redirect(url_for('change_password'))
-        new_hash = generate_password_hash(new)
-        c.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user_id))
-        conn.commit()
-        conn.close()
-        flash("パスワードを更新しました。", "success")
-        return redirect(url_for('index'))
-    return render_template('change_password.html')
-
 @app.route('/my/import', methods=['POST'])
 @login_required
 def import_csv():
