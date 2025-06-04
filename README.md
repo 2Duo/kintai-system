@@ -30,9 +30,9 @@
 kintai-system/
 ├── app.py # Flaskアプリ本体
 ├── database/
-│ ├── kintai.db # SQLite DBの実データ
+│ ├── kintai.db # SQLite DBの実データ（アプリ起動時に生成、Git管理外）
 │ └── schema.sql # テーブル定義
-├── exports/ # 出力CSVの保存先
+├── exports/ # 出力CSVの保存先（アプリ実行時に自動生成されGit管理外）
 ├── templates/ # HTMLテンプレート
 ├── static/
 │ ├── style.css # スタイルシート
