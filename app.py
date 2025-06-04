@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, send_file, flash, abort
+from flask import Flask, render_template, request, redirect, url_for, session, send_file, flash
 import sqlite3
 from datetime import datetime, timedelta
 import os
@@ -531,6 +531,7 @@ def export_combined():
     now = datetime.now()
     years = list(range(now.year - 3, now.year + 2))
     if request.method == 'POST':
+        delete_old_exports(EXPORT_DIR)
         if not check_csrf():
             return redirect(url_for('export_combined'))
         year = int(request.form['year'])
