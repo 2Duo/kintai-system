@@ -2,3 +2,4 @@ Flask
 werkzeug
 gunicorn
 python-dotenv
+pytest
