@@ -256,6 +256,7 @@ def punch():
               (user_id, timestamp, punch_type, description))
     conn.commit()
     conn.close()
+    flash("打刻しました。", "success")
     referer = request.form.get('referer', url_for('index'))
     return redirect(referer)
 
@@ -279,7 +280,9 @@ def resolve_punch():
                   (user_id, timestamp, punch_type, description))
         conn.commit()
     conn.close()
-    return redirect(url_for('index'))
+    flash("打刻しました。", "success")
+    referer = request.form.get('referer', url_for('index'))
+    return redirect(referer)
 
 @app.route('/exports/<filename>')
 @admin_required
