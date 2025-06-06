@@ -2,7 +2,7 @@ body {
     font-family: sans-serif;
     background-color: #f4f4f4;
     text-align: center;
-    padding-top: 50px;
+    padding-top: 0;
     font-size: 1.1rem; /* larger default font for readability */
     color: #000;
 }
