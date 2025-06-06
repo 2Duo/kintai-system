@@ -711,27 +711,38 @@ def edit_user(user_id):
     conn.close()
     return render_template('edit_user.html', user_id=user_id, user=user, errors=errors)
 
-@app.route('/admin/users/delete/<int:user_id>', methods=['POST'])
+@app.route('/admin/users/delete/<int:user_id>', methods=['GET', 'POST'])
 @admin_required
 def delete_user(user_id):
-    if not check_csrf():
-        return redirect(url_for('list_users'))
-    # 自分自身の削除は禁止
-    if user_id == session.get('user_id'):
-        flash("自分自身のアカウントは削除できません。", "danger")
-        return redirect(url_for('list_users'))
     conn = get_db()
     c = conn.cursor()
-    c.execute("SELECT is_superadmin FROM users WHERE id = ?", (user_id,))
-    row = c.fetchone()
-    if row and row["is_superadmin"]:
-        flash("スーパー管理者は削除できません。", "danger")
+    c.execute("SELECT id, name, is_superadmin FROM users WHERE id = ?", (user_id,))
+    user = c.fetchone()
+    if not user:
         conn.close()
+        flash("ユーザーが見つかりません。", "danger")
         return redirect(url_for('list_users'))
-    c.execute("DELETE FROM users WHERE id = ?", (user_id,))
-    conn.commit()
+
+    if request.method == 'POST':
+        if not check_csrf():
+            conn.close()
+            return redirect(url_for('list_users'))
+        if user_id == session.get('user_id'):
+            flash("自分自身のアカウントは削除できません。", "danger")
+            conn.close()
+            return redirect(url_for('list_users'))
+        if user['is_superadmin']:
+            flash("スーパー管理者は削除できません。", "danger")
+            conn.close()
+            return redirect(url_for('list_users'))
+        c.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        conn.commit()
+        conn.close()
+        flash("ユーザーを削除しました。", "success")
+        return redirect(url_for('list_users'))
+
     conn.close()
-    return redirect(url_for('list_users'))
+    return render_template('confirm_delete_user.html', user=user)
 
 @app.route('/setup', methods=['GET', 'POST'])
 def setup():

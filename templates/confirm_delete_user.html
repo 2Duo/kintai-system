@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+
+{% block title %}ユーザー削除確認{% endblock %}
+
+{% block content %}
+<h2 class="mb-3">ユーザー削除確認</h2>
+<p class="mb-4">{{ user.name }} を削除してよろしいですか？</p>
+<form method="POST">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+  <div class="d-grid gap-2">
+    <button type="submit" class="btn btn-danger">削除</button>
+    <a href="{{ url_for('list_users') }}" class="btn btn-outline-secondary">キャンセル</a>
+  </div>
+</form>
+{% endblock %}
