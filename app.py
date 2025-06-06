@@ -284,12 +284,15 @@ def resolve_punch():
     referer = request.form.get('referer', url_for('index'))
     return redirect(referer)
 
-@app.route('/exports/<filename>')
+@app.route('/exports/<path:filename>')
 @admin_required
 def download_export_file(filename):
-    filepath = os.path.join(EXPORT_DIR, filename)
+    export_root = os.path.abspath(EXPORT_DIR)
+    filepath = os.path.abspath(os.path.join(EXPORT_DIR, filename))
+    if not filepath.startswith(export_root + os.sep):
+        return '不正なファイルパスです', 400
     if not os.path.isfile(filepath):
-        return 'ファイルが存在しません'
+        return 'ファイルが存在しません', 404
     return send_file(filepath, as_attachment=True, mimetype='text/csv')
 
 @app.route('/my/password', methods=['GET', 'POST'])
