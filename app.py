@@ -599,6 +599,7 @@ def create_user():
         name = request.form.get('name', '').strip()
         email = request.form.get('email', '').strip()
         password = request.form.get('password', '')
+        confirm = request.form.get('confirm_password', '')
         is_admin = int('is_admin' in request.form)
 
         if not name:
@@ -607,6 +608,10 @@ def create_user():
             errors['email'] = "正しいメールアドレスを入力してください。"
         if not password or len(password) < 8:
             errors['password'] = "パスワードは8文字以上で入力してください。"
+        if not confirm:
+            errors['confirm_password'] = "パスワード（確認）を入力してください。"
+        elif password and password != confirm:
+            errors['confirm_password'] = "パスワードが一致しません。"
 
         if errors:
             return render_template('create_user.html', errors=errors)
@@ -736,6 +741,7 @@ def setup():
         name = request.form['name']
         email = request.form['email']
         password = request.form['password']
+        confirm = request.form.get('confirm_password', '')
         errors = []
         if not name:
             errors.append("氏名を入力してください。")
@@ -743,6 +749,10 @@ def setup():
             errors.append("正しいメールアドレスを入力してください。")
         if not password or len(password) < 8:
             errors.append("パスワードは8文字以上で入力してください。")
+        if not confirm:
+            errors.append("パスワード（確認）を入力してください。")
+        elif password != confirm:
+            errors.append("パスワードが一致しません。")
         if errors:
             for msg in errors:
                 flash(msg, "danger")
