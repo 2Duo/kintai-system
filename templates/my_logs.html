@@ -2,7 +2,7 @@
 {% block title %}勤怠履歴{% endblock %}
 
 {% block content %}
-<h2>勤怠履歴</h2>
+<h1>勤怠履歴</h1>
 
 <!-- ▼ CSVテンプレートダウンロードボタンを追加 -->
 <div class="mb-3">
@@ -47,8 +47,8 @@
 <form action="{{ url_for('import_csv') }}" method="POST" enctype="multipart/form-data" class="mt-4">
   <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
   <div class="mb-3">
-    <label class="form-label">CSVファイルを選択</label>
-    <input type="file" name="file" class="form-control" accept=".csv" required>
+    <label class="form-label" for="csvFile">CSVファイルを選択</label>
+    <input type="file" id="csvFile" name="file" class="form-control" accept=".csv" required>
   </div>
   <button type="submit" class="btn btn-warning">CSVから読み込む</button>
 </form>

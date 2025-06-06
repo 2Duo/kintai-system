@@ -2,7 +2,7 @@
 {% block title %}CSVインポートの衝突確認{% endblock %}
 
 {% block content %}
-<h2 class="mb-3">CSVインポート時の衝突確認</h2>
+<h1 class="mb-3">CSVインポート時の衝突確認</h1>
 <p class="mb-4">以下のデータにおいて既存の記録が存在します。上書きするかどうかを選択してください。</p>
 
 <form method="POST" action="{{ url_for('resolve_conflicts') }}">

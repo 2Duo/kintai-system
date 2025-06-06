@@ -2,14 +2,14 @@
 {% block title %}CSV出力{% endblock %}
 
 {% block content %}
-<h2 class="mb-4">勤怠CSV出力（管理下のみ）</h2>
+<h1 class="mb-4">勤怠CSV出力（管理下のみ）</h1>
 
 <form method="POST">
   <!-- CSRFトークン追加 -->
   <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
   <div class="mb-3">
-    <label class="form-label">ユーザー</label>
-    <select name="user_id" class="form-select" required>
+    <label class="form-label" for="user_id">ユーザー</label>
+    <select name="user_id" id="user_id" class="form-select" required>
       {% for id, name in user_list %}
       <option value="{{ id }}">{{ name }}</option>
       {% endfor %}
@@ -18,8 +18,8 @@
 
   <div class="row">
     <div class="col-md-6 mb-3">
-      <label class="form-label">年</label>
-      <select name="year" class="form-select">
+      <label class="form-label" for="year">年</label>
+      <select name="year" id="year" class="form-select">
         {% for y in years %}
         <option value="{{ y }}" {% if y == now.year %}selected{% endif %}>{{ y }}</option>
         {% endfor %}
@@ -27,8 +27,8 @@
     </div>
 
     <div class="col-md-6 mb-3">
-      <label class="form-label">月</label>
-      <select name="month" class="form-select">
+      <label class="form-label" for="month">月</label>
+      <select name="month" id="month" class="form-select">
         {% for m in range(1, 13) %}
         <option value="{{ m }}" {% if m == now.month %}selected{% endif %}>{{ "%02d"|format(m) }}</option>
         {% endfor %}

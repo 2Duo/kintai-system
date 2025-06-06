@@ -3,33 +3,33 @@
 {% block title %}初期管理者作成{% endblock %}
 
 {% block content %}
-<h2>初期管理者アカウントの作成</h2>
+<h1>初期管理者アカウントの作成</h1>
 <form method="POST" autocomplete="off">
   <!-- CSRFトークン追加 -->
   <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
   <div class="mb-3">
-    <label class="form-label">メールアドレス</label>
-    <input type="email" class="form-control" name="email" required>
+    <label class="form-label" for="setupEmail">メールアドレス</label>
+    <input type="email" class="form-control" name="email" id="setupEmail" required>
   </div>
   <div class="mb-3">
-    <label class="form-label">氏名</label>
-    <input type="text" class="form-control" name="name" required>
+    <label class="form-label" for="setupName">氏名</label>
+    <input type="text" class="form-control" name="name" id="setupName" required>
   </div>
   <div class="mb-3">
-    <label class="form-label">パスワード</label>
+    <label class="form-label" for="setupPassword">パスワード</label>
     <div class="input-group">
       <input type="password" class="form-control" name="password"
         id="setupPassword" required>
-      <button type="button" class="btn btn-outline-secondary" tabindex="-1"
+      <button type="button" class="btn btn-outline-secondary" aria-label="パスワード表示切り替え"
         onclick="togglePwd('setupPassword', this)">👁</button>
     </div>
   </div>
   <div class="mb-3">
-    <label class="form-label">パスワード（確認）</label>
+    <label class="form-label" for="setupPasswordConfirm">パスワード（確認）</label>
     <div class="input-group">
       <input type="password" class="form-control" name="confirm_password"
         id="setupPasswordConfirm" required>
-      <button type="button" class="btn btn-outline-secondary" tabindex="-1"
+      <button type="button" class="btn btn-outline-secondary" aria-label="パスワード表示切り替え"
         onclick="togglePwd('setupPasswordConfirm', this)">👁</button>
     </div>
   </div>

@@ -170,6 +170,8 @@ def delete_old_exports(base_dir='exports', days=30):
 # === 9. 初回起動時セットアップ画面リダイレクト ===
 @app.before_request
 def redirect_to_setup_if_first_run():
+    if app.config.get('TESTING'):
+        return
     if request.endpoint in ('static', 'setup'):
         return
     conn = get_db()
