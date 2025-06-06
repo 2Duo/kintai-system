@@ -3,7 +3,7 @@ import sqlite3
 from datetime import datetime, timedelta
 import os
 import csv
-from io import TextIOWrapper
+from io import TextIOWrapper, BytesIO
 from werkzeug.security import generate_password_hash, check_password_hash
 from collections import defaultdict
 import tempfile
@@ -475,6 +475,20 @@ def view_my_logs():
         else:
             data['overtime'] = ''
     return render_template('my_logs.html', logs=attendance_by_day)
+
+
+@app.route('/template_csv')
+@login_required
+def download_template_csv():
+    template_path = os.path.join(app.root_path, 'static', 'テンプレート.csv')
+    with open(template_path, encoding='utf-8') as f:
+        data = f.read()
+    # Shift_JIS でエンコードして返す
+    buf = BytesIO()
+    buf.write(data.encode('shift_jis'))
+    buf.seek(0)
+    return send_file(buf, mimetype='text/csv; charset=shift_jis',
+                     as_attachment=True, download_name='テンプレート.csv')
 
 @app.route('/my/logs/edit/<date>', methods=['GET', 'POST'])
 @login_required
