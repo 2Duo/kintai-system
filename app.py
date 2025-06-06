@@ -557,16 +557,22 @@ def export_combined():
             os.makedirs(export_subdir, exist_ok=True)
             csv_path = generate_csv(user_id, name, year, month, export_subdir, get_overtime_threshold(user_id))
             if not csv_path:
-                return '該当データがありません'
+                flash('該当データがありません。', 'warning')
+                return redirect(url_for('export_combined'))
             return send_file(csv_path, mimetype='text/csv', as_attachment=True, download_name=os.path.basename(csv_path))
         elif request.form['action'] == 'bulk_all':
             with tempfile.TemporaryDirectory() as temp_dir:
                 zip_path = os.path.join(temp_dir, f"勤怠記録_{year}_{month:02d}.zip")
+                any_file = False
                 with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                     for user_id, name in user_list:
                         csv_file = generate_csv(user_id, name, year, month, temp_dir, get_overtime_threshold(user_id))
                         if csv_file:
                             zipf.write(csv_file, os.path.basename(csv_file))
+                            any_file = True
+                if not any_file:
+                    flash('該当データがありません。', 'warning')
+                    return redirect(url_for('export_combined'))
                 return send_file(zip_path, mimetype='application/zip', as_attachment=True, download_name=f"勤怠記録_{year}_{month:02d}.zip")
     return render_template('export.html', user_list=user_list, now=now, years=years)
 
@@ -647,6 +653,7 @@ def update_managed_users():
         c.execute("INSERT INTO admin_managed_users (admin_id, user_id) VALUES (?, ?)", (admin_id, user_id))
     conn.commit()
     conn.close()
+    flash("管理対象を更新しました。", "success")
     return redirect(url_for('list_users'))
 
 @app.route('/admin/users/edit/<int:user_id>', methods=['GET', 'POST'])
