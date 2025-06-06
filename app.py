@@ -13,6 +13,8 @@ import re
 import secrets
 from functools import wraps
 from dotenv import load_dotenv
+import smtplib
+from email.message import EmailMessage
 
 load_dotenv()
 
@@ -76,6 +78,14 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated
 
+def superadmin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('is_superadmin'):
+            return 'アクセス拒否'
+        return f(*args, **kwargs)
+    return decorated
+
 # === 5. ファイル検証 ===
 ALLOWED_EXTENSIONS = {'csv'}
 def allowed_file(filename):
@@ -117,6 +127,62 @@ def normalize_time_str(time_str):
         return dt.strftime('%H:%M')
     except ValueError:
         return time_str
+
+# === 8.1 メール設定管理 ===
+def get_mail_settings():
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        "SELECT server, port, username, password, use_tls, subject_template, body_template FROM mail_settings WHERE id = 1"
+    )
+    row = c.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def save_mail_settings(server, port, username, password, use_tls, subject_tmpl, body_tmpl):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        """
+        INSERT INTO mail_settings (id, server, port, username, password, use_tls, subject_template, body_template)
+        VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            server=excluded.server,
+            port=excluded.port,
+            username=excluded.username,
+            password=excluded.password,
+            use_tls=excluded.use_tls,
+            subject_template=excluded.subject_template,
+            body_template=excluded.body_template
+        """,
+        (server, port, username, password, use_tls, subject_tmpl, body_tmpl),
+    )
+    conn.commit()
+    conn.close()
+
+
+def send_registration_email(to_email, name):
+    settings = get_mail_settings()
+    if not settings:
+        return
+    subject = (settings.get("subject_template") or "").format(name=name, email=to_email)
+    body = (settings.get("body_template") or "").format(name=name, email=to_email)
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = settings.get("username") or settings.get("server")
+    msg["To"] = to_email
+    msg.set_content(body)
+    try:
+        with smtplib.SMTP(settings["server"], int(settings["port"])) as smtp:
+            if settings.get("use_tls"):
+                smtp.starttls()
+            if settings.get("username"):
+                smtp.login(settings["username"], settings.get("password", ""))
+            smtp.send_message(msg)
+    except Exception as e:
+        app.logger.error(f"メール送信に失敗しました: {e}")
+
 
 # === 9. CSV出力ロジック一本化 ===
 def generate_csv(user_id, name, year, month, target_dir, overtime_threshold='18:00'):
@@ -215,7 +281,7 @@ def login():
         if not errors:
             conn = get_db()
             c = conn.cursor()
-            c.execute("SELECT id, name, password_hash, is_admin FROM users WHERE email = ?", (email,))
+            c.execute("SELECT id, name, password_hash, is_admin, is_superadmin FROM users WHERE email = ?", (email,))
             user = c.fetchone()
             conn.close()
             if not user or not check_password_hash(user['password_hash'], password):
@@ -227,6 +293,7 @@ def login():
         session['user_id'] = user['id']
         session['user_name'] = user['name']
         session['is_admin'] = bool(user['is_admin'])
+        session['is_superadmin'] = bool(user['is_superadmin'])
         return redirect(url_for('index'))
 
     return render_template('login.html', errors=errors)
@@ -645,6 +712,7 @@ def create_user():
             c.execute("INSERT INTO users (name, email, password_hash, is_admin, is_superadmin) VALUES (?, ?, ?, ?, 0)",
                       (name, email, password_hash, is_admin))
             conn.commit()
+            send_registration_email(email, name)
         except sqlite3.IntegrityError:
             conn.close()
             errors['email'] = "このメールアドレスはすでに登録されています。"
@@ -759,6 +827,34 @@ def delete_user(user_id):
 
     conn.close()
     return render_template('confirm_delete_user.html', user=user)
+
+
+@app.route('/admin/mail_settings', methods=['GET', 'POST'])
+@superadmin_required
+def mail_settings():
+    errors = {}
+    settings = get_mail_settings() or {}
+    if request.method == 'POST':
+        if not check_csrf():
+            return redirect(url_for('mail_settings'))
+        server = request.form.get('server', '').strip()
+        port = request.form.get('port', '').strip()
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        use_tls = int('use_tls' in request.form)
+        subject_tmpl = request.form.get('subject_template', '').strip()
+        body_tmpl = request.form.get('body_template', '').strip()
+        if not server:
+            errors['server'] = 'サーバーを入力してください。'
+        if not port.isdigit():
+            errors['port'] = 'ポート番号を入力してください。'
+        if errors:
+            settings.update(request.form)
+            return render_template('mail_settings.html', settings=settings, errors=errors)
+        save_mail_settings(server, int(port), username, password, use_tls, subject_tmpl, body_tmpl)
+        flash('メール設定を更新しました。', 'success')
+        return redirect(url_for('mail_settings'))
+    return render_template('mail_settings.html', settings=settings, errors=errors)
 
 @app.route('/setup', methods=['GET', 'POST'])
 def setup():

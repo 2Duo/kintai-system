@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% block title %}メール設定{% endblock %}
+{% block content %}
+<h1 class="mb-3">メール設定</h1>
+<form method="POST">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+  <div class="mb-3">
+    <label class="form-label" for="server">SMTPサーバー</label>
+    <input type="text" class="form-control {% if errors.get('server') %}is-invalid{% endif %}" id="server" name="server" value="{{ settings.get('server','') }}" required>
+    {% if errors.get('server') %}<div class="invalid-feedback">{{ errors['server'] }}</div>{% endif %}
+  </div>
+  <div class="mb-3">
+    <label class="form-label" for="port">ポート</label>
+    <input type="text" class="form-control {% if errors.get('port') %}is-invalid{% endif %}" id="port" name="port" value="{{ settings.get('port','') }}" required>
+    {% if errors.get('port') %}<div class="invalid-feedback">{{ errors['port'] }}</div>{% endif %}
+  </div>
+  <div class="mb-3">
+    <label class="form-label" for="username">ユーザー名</label>
+    <input type="text" class="form-control" id="username" name="username" value="{{ settings.get('username','') }}">
+  </div>
+  <div class="mb-3">
+    <label class="form-label" for="password">パスワード</label>
+    <input type="password" class="form-control" id="password" name="password" value="{{ settings.get('password','') }}">
+  </div>
+  <div class="form-check mb-3">
+    <input class="form-check-input" type="checkbox" id="use_tls" name="use_tls" {% if settings.get('use_tls') %}checked{% endif %}>
+    <label class="form-check-label" for="use_tls">TLSを使用</label>
+  </div>
+  <div class="mb-3">
+    <label class="form-label" for="subject_template">件名テンプレート</label>
+    <input type="text" class="form-control" id="subject_template" name="subject_template" value="{{ settings.get('subject_template','') }}">
+    <div class="form-text">{name} や {email} を挿入できます</div>
+  </div>
+  <div class="mb-3">
+    <label class="form-label" for="body_template">本文テンプレート</label>
+    <textarea class="form-control" id="body_template" name="body_template" rows="5">{{ settings.get('body_template','') }}</textarea>
+    <div class="form-text">{name} や {email} を挿入できます</div>
+  </div>
+  <button type="submit" class="btn btn-success">保存</button>
+</form>
+{% endblock %}

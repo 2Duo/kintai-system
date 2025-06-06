@@ -27,3 +27,15 @@ CREATE TABLE IF NOT EXISTS attendance (
     description TEXT,
     FOREIGN KEY(user_id) REFERENCES users(id)
 );
+
+-- メール設定（常に1行のみ）
+CREATE TABLE IF NOT EXISTS mail_settings (
+    id INTEGER PRIMARY KEY CHECK(id = 1),
+    server TEXT NOT NULL,
+    port INTEGER NOT NULL,
+    username TEXT,
+    password TEXT,
+    use_tls INTEGER DEFAULT 1,
+    subject_template TEXT,
+    body_template TEXT
+);
