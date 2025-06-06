@@ -2,12 +2,12 @@
 {% block title %}ユーザー編集{% endblock %}
 
 {% block content %}
-<h2>ユーザー編集</h2>
+<h1>ユーザー編集</h1>
 <form method="POST" autocomplete="off">
   <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
   <div class="mb-3">
-    <label class="form-label">氏名</label>
-    <input type="text" name="name"
+    <label class="form-label" for="editName">氏名</label>
+    <input type="text" name="name" id="editName"
       class="form-control {% if errors and errors.get('name') %}is-invalid{% endif %}"
       value="{{ request.form.get('name', user[0]) }}"
       required>
@@ -16,8 +16,8 @@
     {% endif %}
   </div>
   <div class="mb-3">
-    <label class="form-label">メールアドレス</label>
-    <input type="email" name="email"
+    <label class="form-label" for="editEmail">メールアドレス</label>
+    <input type="email" name="email" id="editEmail"
       class="form-control {% if errors and errors.get('email') %}is-invalid{% endif %}"
       value="{{ request.form.get('email', user[1]) }}"
       required>
@@ -26,21 +26,21 @@
     {% endif %}
   </div>
   <div class="mb-3">
-    <label class="form-label">残業カウント開始時刻（例：18:00）</label>
+    <label class="form-label" for="overtime_threshold">残業カウント開始時刻（例：18:00）</label>
     <input type="time" class="form-control {% if errors and errors.get('overtime_threshold') %}is-invalid{% endif %}"
-      name="overtime_threshold"
+      name="overtime_threshold" id="overtime_threshold"
       value="{{ request.form.get('overtime_threshold', user[3]) }}">
     {% if errors and errors.get('overtime_threshold') %}
       <div class="invalid-feedback">{{ errors.get('overtime_threshold') }}</div>
     {% endif %}
   </div>
   <div class="mb-3">
-    <label class="form-label">新しいパスワード（空欄なら変更なし）</label>
+    <label class="form-label" for="editNewPassword">新しいパスワード（空欄なら変更なし）</label>
     <div class="input-group">
       <input type="password" name="new_password"
         class="form-control {% if errors and errors.get('new_password') %}is-invalid{% endif %}"
         id="editNewPassword">
-      <button type="button" class="btn btn-outline-secondary" tabindex="-1"
+      <button type="button" class="btn btn-outline-secondary" aria-label="パスワード表示切り替え"
         onclick="togglePwd('editNewPassword', this)">👁</button>
     </div>
     {% if errors and errors.get('new_password') %}

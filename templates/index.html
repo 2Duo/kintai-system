@@ -3,7 +3,7 @@
 {% block title %}勤怠打刻{% endblock %}
 
 {% block content %}
-<h2>勤怠打刻</h2>
+<h1>勤怠打刻</h1>
 <form method="POST" action="{{ url_for('punch') }}" onkeydown="return event.key !== 'Enter';">
   <!-- CSRFトークン追加 -->
   <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
@@ -12,8 +12,8 @@
     <input type="datetime-local" class="form-control" name="timestamp" id="timestamp" required>
   </div>
 
-  <div class="mb-3">
-    <label class="form-label">区分</label><br>
+  <fieldset class="mb-3">
+    <legend class="col-form-label pt-0">区分</legend>
     <div class="form-check form-check-inline">
       <input class="form-check-input" type="radio" name="type" id="type_in" value="in" checked>
       <label class="form-check-label" for="type_in">出勤</label>
@@ -22,10 +22,10 @@
       <input class="form-check-input" type="radio" name="type" id="type_out" value="out">
       <label class="form-check-label" for="type_out">退勤</label>
     </div>
-  </div>
+  </fieldset>
 
-  <div class="mb-3">
-    <label for="description" class="form-label">業務内容（退勤時のみ）</label>
+  <div class="mb-3" id="description-group" style="display:none;">
+    <label for="description" class="form-label">業務内容</label>
     <textarea class="form-control" name="description" id="description" rows="3" placeholder="例：見積作成・メール対応など"></textarea>
   </div>
 
@@ -38,6 +38,15 @@
     const offset = now.getTimezoneOffset();
     const localISOTime = new Date(now.getTime() - offset * 60000).toISOString().slice(0, 16);
     document.getElementById("timestamp").value = localISOTime;
+    const typeIn = document.getElementById('type_in');
+    const typeOut = document.getElementById('type_out');
+    const descGroup = document.getElementById('description-group');
+    function toggleDesc() {
+      descGroup.style.display = typeOut.checked ? 'block' : 'none';
+    }
+    typeIn.addEventListener('change', toggleDesc);
+    typeOut.addEventListener('change', toggleDesc);
+    toggleDesc();
   };
 </script>
 {% endblock %}
