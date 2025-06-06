@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session, send_file, flash
+from werkzeug.exceptions import RequestEntityTooLarge
 import sqlite3
 from datetime import datetime, timedelta
 import os
@@ -17,6 +18,7 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your_secret_key_here')  # 本番は環境変数
+app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_CONTENT_LENGTH', 10 * 1024 * 1024))
 
 if not app.secret_key or app.secret_key == 'your_secret_key_here':
     raise RuntimeError("SECRET_KEYを環境変数で必ず設定してください")
@@ -79,7 +81,13 @@ ALLOWED_EXTENSIONS = {'csv'}
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# === 6. DB初期化 ===
+# === 6. エラーハンドリング ===
+@app.errorhandler(RequestEntityTooLarge)
+def handle_file_too_large(e):
+    flash("アップロードできるファイルサイズを超えています。", "danger")
+    return redirect(url_for('view_my_logs')), 413
+
+# === 7. DB初期化 ===
 def initialize_database():
     if not os.path.exists(DB_PATH):
         os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
@@ -90,7 +98,7 @@ def initialize_database():
         conn.close()
 initialize_database()
 
-# === 7. 各種ユーティリティ ===
+# === 8. 各種ユーティリティ ===
 def safe_fromisoformat(ts):
     try:
         return datetime.fromisoformat(ts)
@@ -110,7 +118,7 @@ def normalize_time_str(time_str):
     except ValueError:
         return time_str
 
-# === 8. CSV出力ロジック一本化 ===
+# === 9. CSV出力ロジック一本化 ===
 def generate_csv(user_id, name, year, month, target_dir, overtime_threshold='18:00'):
     conn = get_db()
     c = conn.cursor()
@@ -167,7 +175,7 @@ def delete_old_exports(base_dir='exports', days=30):
             if os.path.isfile(path) and os.path.getmtime(path) < threshold.timestamp():
                 os.remove(path)
 
-# === 9. 初回起動時セットアップ画面リダイレクト ===
+# === 10. 初回起動時セットアップ画面リダイレクト ===
 @app.before_request
 def redirect_to_setup_if_first_run():
     if app.config.get('TESTING'):
@@ -182,7 +190,7 @@ def redirect_to_setup_if_first_run():
     if count == 0:
         return redirect(url_for('setup'))
 
-# === 10. 各route ===
+# === 11. 各route ===
 
 @app.route('/')
 @login_required
