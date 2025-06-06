@@ -6,8 +6,9 @@
 
 <!-- ▼ CSVテンプレートダウンロードボタンを追加 -->
 <div class="mb-3">
-  <a href="{{ url_for('static', filename='テンプレート.csv') }}"
+  <a href="{{ url_for('download_template_csv') }}"
      class="btn btn-outline-secondary btn-sm">
+
     CSVテンプレートをダウンロード
   </a>
   <span class="ms-2 text-muted small">ヘッダー行は変更しないでください</span>
