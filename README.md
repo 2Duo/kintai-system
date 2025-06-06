@@ -123,6 +123,43 @@ GitHub等にアップロードする際は、`.env`は**絶対に公開しない
 
 ---
 
+## Ubuntuでの常駐運用例（gunicorn + systemd）
+
+1. 仮想環境を作成し、依存パッケージをインストールします。
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt
+   ```
+2. `.env.example` をコピーして `.env` を作成し、`SECRET_KEY` や `FLASK_DEBUG=0` など本番用の値を設定します。
+3. `gunicorn` でアプリを起動する systemd サービスファイルを作成します。例：`/etc/systemd/system/kintai.service`
+   ```ini
+   [Unit]
+   Description=Kintai System
+   After=network.target
+
+   [Service]
+   Type=simple
+   User=www-data  # 実行ユーザー
+   WorkingDirectory=/path/to/kintai-system
+   EnvironmentFile=/path/to/kintai-system/.env
+   ExecStart=/path/to/kintai-system/venv/bin/gunicorn -w 4 -b 0.0.0.0:8000 app:app
+   Restart=always
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+4. サービスを有効化・起動します。
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl start kintai.service
+   sudo systemctl enable kintai.service
+   ```
+   `systemctl status kintai.service` で状態を確認できます。
+
+
+---
+
 ## CSV仕様
 
 ### 出力形式（例）
