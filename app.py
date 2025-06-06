@@ -3,7 +3,7 @@ import sqlite3
 from datetime import datetime, timedelta
 import os
 import csv
-from io import TextIOWrapper
+from io import TextIOWrapper, BytesIO
 from werkzeug.security import generate_password_hash, check_password_hash
 from collections import defaultdict
 import tempfile
@@ -476,6 +476,20 @@ def view_my_logs():
             data['overtime'] = ''
     return render_template('my_logs.html', logs=attendance_by_day)
 
+
+@app.route('/template_csv')
+@login_required
+def download_template_csv():
+    template_path = os.path.join(app.root_path, 'static', 'テンプレート.csv')
+    with open(template_path, encoding='utf-8') as f:
+        data = f.read()
+    # Shift_JIS でエンコードして返す
+    buf = BytesIO()
+    buf.write(data.encode('shift_jis'))
+    buf.seek(0)
+    return send_file(buf, mimetype='text/csv; charset=shift_jis',
+                     as_attachment=True, download_name='テンプレート.csv')
+
 @app.route('/my/logs/edit/<date>', methods=['GET', 'POST'])
 @login_required
 def edit_log(date):
@@ -557,16 +571,22 @@ def export_combined():
             os.makedirs(export_subdir, exist_ok=True)
             csv_path = generate_csv(user_id, name, year, month, export_subdir, get_overtime_threshold(user_id))
             if not csv_path:
-                return '該当データがありません'
+                flash('該当データがありません。', 'warning')
+                return redirect(url_for('export_combined'))
             return send_file(csv_path, mimetype='text/csv', as_attachment=True, download_name=os.path.basename(csv_path))
         elif request.form['action'] == 'bulk_all':
             with tempfile.TemporaryDirectory() as temp_dir:
                 zip_path = os.path.join(temp_dir, f"勤怠記録_{year}_{month:02d}.zip")
+                any_file = False
                 with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                     for user_id, name in user_list:
                         csv_file = generate_csv(user_id, name, year, month, temp_dir, get_overtime_threshold(user_id))
                         if csv_file:
                             zipf.write(csv_file, os.path.basename(csv_file))
+                            any_file = True
+                if not any_file:
+                    flash('該当データがありません。', 'warning')
+                    return redirect(url_for('export_combined'))
                 return send_file(zip_path, mimetype='application/zip', as_attachment=True, download_name=f"勤怠記録_{year}_{month:02d}.zip")
     return render_template('export.html', user_list=user_list, now=now, years=years)
 
@@ -599,6 +619,7 @@ def create_user():
         name = request.form.get('name', '').strip()
         email = request.form.get('email', '').strip()
         password = request.form.get('password', '')
+        confirm = request.form.get('confirm_password', '')
         is_admin = int('is_admin' in request.form)
 
         if not name:
@@ -607,6 +628,10 @@ def create_user():
             errors['email'] = "正しいメールアドレスを入力してください。"
         if not password or len(password) < 8:
             errors['password'] = "パスワードは8文字以上で入力してください。"
+        if not confirm:
+            errors['confirm_password'] = "パスワード（確認）を入力してください。"
+        elif password and password != confirm:
+            errors['confirm_password'] = "パスワードが一致しません。"
 
         if errors:
             return render_template('create_user.html', errors=errors)
@@ -642,6 +667,7 @@ def update_managed_users():
         c.execute("INSERT INTO admin_managed_users (admin_id, user_id) VALUES (?, ?)", (admin_id, user_id))
     conn.commit()
     conn.close()
+    flash("管理対象を更新しました。", "success")
     return redirect(url_for('list_users'))
 
 @app.route('/admin/users/edit/<int:user_id>', methods=['GET', 'POST'])
@@ -699,27 +725,38 @@ def edit_user(user_id):
     conn.close()
     return render_template('edit_user.html', user_id=user_id, user=user, errors=errors)
 
-@app.route('/admin/users/delete/<int:user_id>', methods=['POST'])
+@app.route('/admin/users/delete/<int:user_id>', methods=['GET', 'POST'])
 @admin_required
 def delete_user(user_id):
-    if not check_csrf():
-        return redirect(url_for('list_users'))
-    # 自分自身の削除は禁止
-    if user_id == session.get('user_id'):
-        flash("自分自身のアカウントは削除できません。", "danger")
-        return redirect(url_for('list_users'))
     conn = get_db()
     c = conn.cursor()
-    c.execute("SELECT is_superadmin FROM users WHERE id = ?", (user_id,))
-    row = c.fetchone()
-    if row and row["is_superadmin"]:
-        flash("スーパー管理者は削除できません。", "danger")
+    c.execute("SELECT id, name, is_superadmin FROM users WHERE id = ?", (user_id,))
+    user = c.fetchone()
+    if not user:
         conn.close()
+        flash("ユーザーが見つかりません。", "danger")
         return redirect(url_for('list_users'))
-    c.execute("DELETE FROM users WHERE id = ?", (user_id,))
-    conn.commit()
+
+    if request.method == 'POST':
+        if not check_csrf():
+            conn.close()
+            return redirect(url_for('list_users'))
+        if user_id == session.get('user_id'):
+            flash("自分自身のアカウントは削除できません。", "danger")
+            conn.close()
+            return redirect(url_for('list_users'))
+        if user['is_superadmin']:
+            flash("スーパー管理者は削除できません。", "danger")
+            conn.close()
+            return redirect(url_for('list_users'))
+        c.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        conn.commit()
+        conn.close()
+        flash("ユーザーを削除しました。", "success")
+        return redirect(url_for('list_users'))
+
     conn.close()
-    return redirect(url_for('list_users'))
+    return render_template('confirm_delete_user.html', user=user)
 
 @app.route('/setup', methods=['GET', 'POST'])
 def setup():
@@ -736,6 +773,7 @@ def setup():
         name = request.form['name']
         email = request.form['email']
         password = request.form['password']
+        confirm = request.form.get('confirm_password', '')
         errors = []
         if not name:
             errors.append("氏名を入力してください。")
@@ -743,6 +781,10 @@ def setup():
             errors.append("正しいメールアドレスを入力してください。")
         if not password or len(password) < 8:
             errors.append("パスワードは8文字以上で入力してください。")
+        if not confirm:
+            errors.append("パスワード（確認）を入力してください。")
+        elif password != confirm:
+            errors.append("パスワードが一致しません。")
         if errors:
             for msg in errors:
                 flash(msg, "danger")
