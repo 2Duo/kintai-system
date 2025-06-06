@@ -162,7 +162,7 @@ def generate_csv(user_id, name, year, month, target_dir, overtime_threshold='18:
                         delta = out_dt - th_dt
                         h, m = divmod(delta.seconds // 60, 60)
                         overtime = f"{h:02d}:{m:02d}"
-                except:
+                except ValueError:
                     pass
             writer.writerow([day, weekday, data['in'], data['out'], data['description'], overtime])
     return filepath
@@ -486,7 +486,7 @@ def view_my_logs():
                     delta = out_dt - th_dt
                     hours, minutes = divmod(delta.seconds // 60, 60)
                     data['overtime'] = f"{hours:02d}:{minutes:02d}"
-            except:
+            except ValueError:
                 data['overtime'] = ''
         else:
             data['overtime'] = ''
