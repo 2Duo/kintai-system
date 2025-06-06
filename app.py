@@ -788,4 +788,6 @@ def setup():
     return render_template('setup.html')
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8000, debug=True)
+    debug_env = os.environ.get('FLASK_DEBUG', '0')
+    debug_mode = str(debug_env).lower() in ('1', 'true', 'yes')
+    app.run(host='0.0.0.0', port=8000, debug=debug_mode)
