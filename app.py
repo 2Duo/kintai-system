@@ -541,7 +541,7 @@ def my_password():
                 conn.commit()
                 conn.close()
                 flash("パスワードを更新しました。", "success")
-                return redirect_embedded('index')
+                return redirect_embedded('my_password')
 
         return render_template('my_password.html', errors=errors)
 
