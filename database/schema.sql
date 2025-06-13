@@ -52,3 +52,15 @@ CREATE TABLE IF NOT EXISTS messages (
     FOREIGN KEY(sender_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY(recipient_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+-- 追加インデックス
+CREATE INDEX IF NOT EXISTS idx_attendance_user_timestamp
+    ON attendance(user_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_admin_managed_users_admin_id
+    ON admin_managed_users(admin_id);
+CREATE INDEX IF NOT EXISTS idx_admin_managed_users_user_id
+    ON admin_managed_users(user_id);
+CREATE INDEX IF NOT EXISTS idx_messages_recipient_read
+    ON messages(recipient_id, is_read);
+CREATE INDEX IF NOT EXISTS idx_messages_pair_timestamp
+    ON messages(sender_id, recipient_id, timestamp);
