@@ -887,14 +887,18 @@ def my_chat():
     conn = get_db()
     c = conn.cursor()
     c.execute(
-        "SELECT admin_id FROM admin_managed_users WHERE user_id = ? ORDER BY admin_id LIMIT 1",
+        """
+        SELECT u.id, u.name FROM users u
+        INNER JOIN admin_managed_users m ON u.id = m.admin_id
+        WHERE m.user_id = ? ORDER BY u.name
+        """,
         (user_id,),
     )
-    row = c.fetchone()
+    admins = c.fetchall()
     conn.close()
-    if not row:
+    if not admins:
         return 'チャット可能な管理者が設定されていません'
-    return redirect(url_for('chat', partner_id=row['admin_id']))
+    return render_template('chat_list.html', users=admins, as_admin=False)
 
 
 @app.route('/admin/chat')
@@ -913,7 +917,7 @@ def admin_chat_index():
     )
     users = c.fetchall()
     conn.close()
-    return render_template('chat_list.html', users=users)
+    return render_template('chat_list.html', users=users, as_admin=True)
 
 
 @app.route('/admin/chat/<int:user_id>')

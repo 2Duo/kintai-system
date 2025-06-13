@@ -98,3 +98,12 @@ textarea {
     right: 0;
     transform: translate(50%, -50%);
 }
+
+/* チャット一覧 */
+.chat-list {
+    max-width: 600px;
+    margin: 0 auto;
+}
+.chat-list .list-group-item {
+    cursor: pointer;
+}
