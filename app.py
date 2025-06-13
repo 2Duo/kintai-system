@@ -65,7 +65,7 @@ def log_audit_event(action, user_id=None, user_name=None):
     """監査ログにイベントを記録する"""
     ip = request.remote_addr or '-'
     ua = request.headers.get('User-Agent', '-')
-    ts = datetime.now().astimezone().isoformat()
+    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     line = (
         f"{ts}\t{action}\t{user_id if user_id else '-'}\t"
         f"{user_name if user_name else '-'}\t{ip}\t{ua}\n"

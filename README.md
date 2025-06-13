@@ -126,6 +126,7 @@ GitHub等にアップロードする際は、`.env`は**絶対に公開しない
 - `MAX_CONTENT_LENGTH` ... アップロード可能なCSVの最大バイト数（例: 10485760）
 - `AUDIT_LOG_PATH` ... 監査ログファイルの出力パス（省略時は `logs/audit.log`）
   - 行は `timestamp\taction\tuser_id\tuser_name\tIP\tUser-Agent` の形式
+    - `timestamp` は `YYYY-MM-DD HH:MM:SS`
 
 ---
 
