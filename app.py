@@ -372,15 +372,19 @@ def download_export_file(filename):
         return 'ファイルが存在しません', 404
     return send_file(filepath, as_attachment=True, mimetype='text/csv')
 
-@app.route('/my', methods=['GET', 'POST'])
-@app.route('/my/password', methods=['GET', 'POST'])
+@app.route('/my')
 @login_required
 def my_page():
+    return render_template('my_page.html')
+
+@app.route('/my/password', methods=['GET', 'POST'])
+@login_required
+def my_password():
     user_id = session['user_id']
     errors = {}
     if request.method == 'POST':
         if not check_csrf():
-            return redirect(url_for('my_page'))
+            return redirect(url_for('my_password'))
         current = request.form.get('current_password', '')
         new = request.form.get('new_password', '')
         confirm = request.form.get('confirm_password', '')
@@ -412,9 +416,9 @@ def my_page():
                 flash("パスワードを更新しました。", "success")
                 return redirect(url_for('index'))
 
-        return render_template('my_page.html', errors=errors)
+        return render_template('my_password.html', errors=errors)
 
-    return render_template('my_page.html', errors=errors)
+    return render_template('my_password.html', errors=errors)
 
 @app.route('/my/import', methods=['POST'])
 @login_required
