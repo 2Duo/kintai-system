@@ -33,7 +33,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function setFrameHeight() {
     const rect = frame.getBoundingClientRect();
-    frame.style.height = (window.innerHeight - rect.top) + 'px';
+    let h = window.innerHeight - rect.top;
+    try {
+      const body = frame.contentDocument.body;
+      h = Math.max(h, body.scrollHeight);
+    } catch (e) {}
+    frame.style.height = h + 'px';
   }
 
   window.addEventListener('resize', setFrameHeight);
