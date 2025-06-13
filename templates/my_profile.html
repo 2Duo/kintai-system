@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}マイページ{% endblock %}
+
+{% block content %}
+<style>
+/* マイページは幅に余裕を持たせる */
+.container {
+  max-width: 900px;
+}
+</style>
+<h1 class="mb-4">マイページ</h1>
+
+<p>こんにちは、{{ session.get('user_name') }}さん</p>
+{% endblock %}

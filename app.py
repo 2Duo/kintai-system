@@ -483,7 +483,13 @@ def download_export_file(filename):
 @app.route('/my')
 @login_required
 def my_page():
-    return render_template('my_page.html')
+    return render_template('my_dashboard.html')
+
+
+@app.route('/my/profile')
+@login_required
+def my_profile():
+    return render_template('my_profile.html')
 
 
 @app.route('/admin')

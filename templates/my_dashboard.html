@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% block title %}マイページ{% endblock %}
+{% block content %}
+<style>
+.container {
+  max-width: 900px;
+}
+#my-frame {
+  border: none;
+  width: 100%;
+}
+#my-frame-wrapper {
+  background: #fff;
+}
+</style>
+<h1 class="mb-4">マイページ</h1>
+<div class="row">
+  <div class="col-md-3 mb-3">
+    <div class="list-group" id="my-menu">
+      <a href="{{ url_for('my_profile') }}" class="list-group-item list-group-item-action">プロフィール</a>
+      <a href="{{ url_for('my_password') }}" class="list-group-item list-group-item-action">パスワード変更</a>
+    </div>
+  </div>
+  <div class="col-md-9" id="my-frame-wrapper" style="overflow:hidden">
+    <iframe id="my-frame"></iframe>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const frame = document.getElementById('my-frame');
+  const links = document.querySelectorAll('#my-menu a');
+
+  function setFrameHeight() {
+    const rect = frame.getBoundingClientRect();
+    frame.style.height = (window.innerHeight - rect.top) + 'px';
+  }
+
+  window.addEventListener('resize', setFrameHeight);
+
+  function activate(link) {
+    links.forEach(a => a.classList.remove('active'));
+    link.classList.add('active');
+  }
+
+  links.forEach(link => {
+    link.addEventListener('click', ev => {
+      ev.preventDefault();
+      let url = link.href;
+      url += (url.includes('?') ? '&' : '?') + 'embedded=1';
+      frame.src = url;
+      activate(link);
+    });
+  });
+
+  if (links.length > 0) {
+    let url = links[0].href;
+    url += (url.includes('?') ? '&' : '?') + 'embedded=1';
+    frame.src = url;
+    activate(links[0]);
+  }
+
+  setFrameHeight();
+});
+</script>
+{% endblock %}
