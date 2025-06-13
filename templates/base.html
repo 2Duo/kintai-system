@@ -33,14 +33,20 @@
   <div class="container-fluid">
     <a class="navbar-brand" href="{{ url_for('index') }}">勤怠管理</a>
     <!-- ▼ ハンバーガーメニュー開閉ボタン -->
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMenu"
+    <button class="navbar-toggler position-relative" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMenu"
             aria-controls="navbarMenu" aria-expanded="false" aria-label="メニュー切り替え">
       <span class="navbar-toggler-icon"></span>
+      <span id="toggle-unread" class="badge bg-danger" style="display:none"></span>
     </button>
     <!-- ▼ 折りたたみ対象メニュー -->
     <div class="collapse navbar-collapse" id="navbarMenu">
       <ul class="navbar-nav me-auto">
         <li class="nav-item"><a class="nav-link" href="{{ url_for('index') }}">打刻</a></li>
+        <li class="nav-item">
+          <a class="nav-link" href="{{ url_for('my_chat') }}">チャット
+            <span id="nav-unread" class="badge bg-danger ms-1" {% if not unread_count %}style="display:none"{% endif %}>{{ unread_count }}</span>
+          </a>
+        </li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('view_my_logs') }}">勤怠表示・CSV</a></li>
         {% if session.get('is_admin') %}
         <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_dashboard') }}">管理ページ</a></li>
@@ -85,6 +91,40 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 <!-- ▲▲▲ Service Worker登録スクリプト ▲▲▲ -->
+
+<script>
+function handleUnread(count){
+  document.querySelectorAll('#nav-unread, #toggle-unread').forEach(b => {
+    if(!b) return;
+    b.textContent = count;
+    b.style.display = count ? 'inline-block' : 'none';
+  });
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const menu = document.getElementById('navbarMenu');
+  const toggleBadge = document.getElementById('toggle-unread');
+  if(menu && toggleBadge){
+    menu.addEventListener('show.bs.collapse', () => { toggleBadge.style.display = 'none'; });
+    menu.addEventListener('hidden.bs.collapse', () => {
+      if(parseInt(toggleBadge.textContent)) toggleBadge.style.display = 'inline-block';
+    });
+  }
+  const evt = new EventSource('{{ url_for('sse_events') }}');
+  evt.onmessage = e => {
+    const data = JSON.parse(e.data);
+    if(data.type === 'unread'){
+      handleUnread(data.count);
+    } else if(data.type === 'message'){
+      if('Notification' in window && Notification.permission === 'granted'){
+        new Notification(data.sender_name || '新着メッセージ', {body: data.message});
+      }
+    }
+  };
+  if('Notification' in window && Notification.permission === 'default'){
+    Notification.requestPermission();
+  }
+});
+</script>
 
 {% if request.args.get('embedded') %}
 <script>

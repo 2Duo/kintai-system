@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, send_file, flash
+from flask import Flask, render_template, request, redirect, url_for, session, send_file, flash, Response
 from werkzeug.exceptions import RequestEntityTooLarge
 import sqlite3
 from datetime import datetime, timedelta
@@ -16,12 +16,17 @@ from dotenv import load_dotenv
 import smtplib
 from email.message import EmailMessage
 import subprocess
+import json
+from queue import Queue
 
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your_secret_key_here')  # 本番は環境変数
 app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_CONTENT_LENGTH', 10 * 1024 * 1024))
+app.permanent_session_lifetime = timedelta(
+    days=int(os.environ.get('SESSION_LIFETIME_DAYS', 7))
+)
 
 if not app.secret_key or app.secret_key == 'your_secret_key_here':
     raise RuntimeError("SECRET_KEYを環境変数で必ず設定してください")
@@ -113,6 +118,45 @@ def check_csrf():
             flash("セッションエラーが発生しました。やり直してください。", "danger")
             return False
     return True
+
+
+@app.context_processor
+def inject_unread_count():
+    if 'user_id' not in session:
+        return {'unread_count': 0}
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        "SELECT COUNT(*) FROM messages WHERE recipient_id = ? AND is_read = 0",
+        (session['user_id'],),
+    )
+    count = c.fetchone()[0]
+    conn.close()
+    return {'unread_count': count}
+
+# === SSE管理 ===
+user_streams = {}
+
+def get_unread_count(user_id):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        "SELECT COUNT(*) FROM messages WHERE recipient_id = ? AND is_read = 0",
+        (user_id,),
+    )
+    count = c.fetchone()[0]
+    conn.close()
+    return count
+
+def push_event(user_id, data):
+    q_list = user_streams.get(user_id)
+    if not q_list:
+        return
+    for q in q_list:
+        q.put(data)
+
+def push_unread(user_id):
+    push_event(user_id, {"type": "unread", "count": get_unread_count(user_id)})
 
 # === 4. ログイン/権限チェックデコレーター ===
 def login_required(f):
@@ -400,6 +444,7 @@ def login():
         session['user_name'] = user['name']
         session['is_admin'] = bool(user['is_admin'])
         session['is_superadmin'] = bool(user['is_superadmin'])
+        session.permanent = True
         log_audit_event('login', user['id'], user['name'])
         return redirect(url_for('index'))
 
@@ -718,6 +763,267 @@ def edit_log(date):
             description = desc or ''
     return render_template('edit_log.html', date=date, in_time=in_time, out_time=out_time, description=description)
 
+
+def can_chat(current_id, partner_id):
+    conn = get_db()
+    c = conn.cursor()
+    if session.get('is_admin'):
+        c.execute(
+            "SELECT 1 FROM admin_managed_users WHERE admin_id = ? AND user_id = ?",
+            (current_id, partner_id),
+        )
+    else:
+        c.execute(
+            "SELECT 1 FROM admin_managed_users WHERE admin_id = ? AND user_id = ?",
+            (partner_id, current_id),
+        )
+    allowed = c.fetchone() is not None
+    conn.close()
+    return allowed
+
+
+def fetch_user_name(user_id):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT name FROM users WHERE id = ?", (user_id,))
+    row = c.fetchone()
+    conn.close()
+    return row['name'] if row else ''
+
+
+@app.route('/chat/<int:partner_id>', methods=['GET', 'POST'])
+@login_required
+def chat(partner_id):
+    current_id = session['user_id']
+    if not can_chat(current_id, partner_id):
+        return 'アクセス拒否'
+    conn = get_db()
+    c = conn.cursor()
+    if request.method == 'POST':
+        if not check_csrf():
+            conn.close()
+            return redirect(url_for('chat', partner_id=partner_id))
+        message = request.form.get('message', '').strip()
+        if message:
+            ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            c.execute(
+                "INSERT INTO messages (sender_id, recipient_id, message, timestamp)"
+                " VALUES (?, ?, ?, ?)",
+                (
+                    current_id,
+                    partner_id,
+                    message,
+                    ts,
+                ),
+            )
+            conn.commit()
+            push_event(partner_id, {
+                "type": "message",
+                "message": message,
+                "sender_id": current_id,
+                "sender_name": session.get('user_name', ''),
+                "timestamp": ts
+            })
+            push_unread(partner_id)
+    limit = 20
+    c.execute(
+        """
+        SELECT id, sender_id, recipient_id, message, timestamp, is_read, read_timestamp
+        FROM messages
+        WHERE (sender_id = ? AND recipient_id = ?) OR
+              (sender_id = ? AND recipient_id = ?)
+        ORDER BY id DESC LIMIT ?
+        """,
+        (current_id, partner_id, partner_id, current_id, limit),
+    )
+    messages = c.fetchall()[::-1]
+    earliest = messages[0]['id'] if messages else 0
+    last_read = ''
+    for m in messages:
+        rt = m['read_timestamp']
+        if rt and rt > last_read:
+            last_read = rt
+    conn.close()
+    partner_name = fetch_user_name(partner_id)
+    return render_template(
+        'chat.html',
+        messages=messages,
+        partner_id=partner_id,
+        partner_name=partner_name,
+        current_id=current_id,
+        last_read=last_read,
+        earliest=earliest,
+    )
+
+
+@app.route('/chat/poll/<int:partner_id>')
+@login_required
+def poll_chat(partner_id):
+    current_id = session['user_id']
+    if not can_chat(current_id, partner_id):
+        return {'messages': [], 'reads': []}
+    after = request.args.get('after', '1970-01-01 00:00:00')
+    after_read = request.args.get('after_read', '1970-01-01 00:00:00')
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT id, sender_id, recipient_id, message, timestamp, is_read, read_timestamp
+        FROM messages
+        WHERE ((sender_id = ? AND recipient_id = ?) OR
+               (sender_id = ? AND recipient_id = ?)) AND timestamp > ?
+        ORDER BY timestamp
+        """,
+        (current_id, partner_id, partner_id, current_id, after),
+    )
+    rows = [dict(r) for r in c.fetchall()]
+    c.execute(
+        "SELECT id FROM messages WHERE sender_id = ? AND recipient_id = ? AND is_read = 1 AND read_timestamp > ?",
+        (current_id, partner_id, after_read),
+    )
+    read_ids = [r['id'] for r in c.fetchall()]
+    conn.close()
+    return {'messages': rows, 'reads': read_ids}
+
+
+@app.route('/chat/history/<int:partner_id>')
+@login_required
+def chat_history(partner_id):
+    current_id = session['user_id']
+    if not can_chat(current_id, partner_id):
+        return {'messages': []}
+    before_id = int(request.args.get('before', 0))
+    limit = int(request.args.get('limit', 20))
+    conn = get_db()
+    c = conn.cursor()
+    query = """
+        SELECT id, sender_id, recipient_id, message, timestamp, is_read, read_timestamp
+        FROM messages
+        WHERE ((sender_id = ? AND recipient_id = ?) OR
+               (sender_id = ? AND recipient_id = ?))
+    """
+    params = [current_id, partner_id, partner_id, current_id]
+    if before_id:
+        query += " AND id < ?"
+        params.append(before_id)
+    query += " ORDER BY id DESC LIMIT ?"
+    params.append(limit)
+    c.execute(query, params)
+    rows = [dict(r) for r in c.fetchall()][::-1]
+    conn.close()
+    return {'messages': rows}
+
+
+@app.route('/chat/mark_read/<int:partner_id>', methods=['POST'])
+@login_required
+def mark_chat_read(partner_id):
+    if not can_chat(session['user_id'], partner_id):
+        return {'status': 'error'}, 403
+    if not check_csrf():
+        return {'status': 'error'}, 400
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        "SELECT id FROM messages WHERE sender_id = ? AND recipient_id = ? AND is_read = 0",
+        (partner_id, session['user_id']),
+    )
+    ids = [r['id'] for r in c.fetchall()]
+    c.execute(
+        "UPDATE messages SET is_read = 1, read_timestamp = ? WHERE sender_id = ? AND recipient_id = ? AND is_read = 0",
+        (now, partner_id, session['user_id']),
+    )
+    updated = c.rowcount
+    conn.commit()
+    conn.close()
+    if updated:
+        push_event(partner_id, {"type": "read", "ids": ids})
+        push_unread(session['user_id'])
+    return {'updated': updated, 'ts': now}
+
+
+@app.route('/chat/unread_count')
+@login_required
+def unread_count_api():
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        "SELECT COUNT(*) FROM messages WHERE recipient_id = ? AND is_read = 0",
+        (session['user_id'],),
+    )
+    count = c.fetchone()[0]
+    conn.close()
+    return {'count': count}
+
+
+@app.route('/events')
+@login_required
+def sse_events():
+    user_id = session['user_id']
+
+    def stream():
+        q = Queue()
+        user_streams.setdefault(user_id, []).append(q)
+        push_unread(user_id)
+        try:
+            while True:
+                data = q.get()
+                yield f"data: {json.dumps(data)}\n\n"
+        finally:
+            user_streams[user_id].remove(q)
+
+    return Response(stream(), mimetype='text/event-stream')
+
+
+@app.route('/my/chat')
+@login_required
+def my_chat():
+    if session.get('is_admin'):
+        return redirect(url_for('admin_chat_index'))
+    user_id = session['user_id']
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT u.id, u.name FROM users u
+        INNER JOIN admin_managed_users m ON u.id = m.admin_id
+        WHERE m.user_id = ? ORDER BY u.name
+        """,
+        (user_id,),
+    )
+    admins = c.fetchall()
+    conn.close()
+    if not admins:
+        return 'チャット可能な管理者が設定されていません'
+    return render_template('chat_list.html', users=admins, as_admin=False)
+
+
+@app.route('/admin/chat')
+@admin_required
+def admin_chat_index():
+    admin_id = session['user_id']
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT u.id, u.name FROM users u
+        INNER JOIN admin_managed_users m ON u.id = m.user_id
+        WHERE m.admin_id = ? ORDER BY u.name
+        """,
+        (admin_id,),
+    )
+    users = c.fetchall()
+    conn.close()
+    return render_template('chat_list.html', users=users, as_admin=True)
+
+
+@app.route('/admin/chat/<int:user_id>')
+@admin_required
+def admin_chat(user_id):
+    if not can_chat(session['user_id'], user_id):
+        return 'アクセス拒否'
+    return redirect(url_for('chat', partner_id=user_id))
+
 @app.route('/admin/export', methods=['GET', 'POST'])
 @admin_required
 def export_combined():
@@ -933,6 +1239,10 @@ def delete_user(user_id):
             flash("スーパー管理者は削除できません。", "danger")
             conn.close()
             return redirect_embedded('list_users')
+        c.execute(
+            "DELETE FROM messages WHERE sender_id = ? OR recipient_id = ?",
+            (user_id, user_id),
+        )
         c.execute("DELETE FROM users WHERE id = ?", (user_id,))
         conn.commit()
         conn.close()

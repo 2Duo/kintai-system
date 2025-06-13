@@ -1,0 +1,138 @@
+{% extends 'base.html' %}
+{% block title %}チャット{% endblock %}
+{% block content %}
+<h1>チャット - {{ partner_name }}</h1>
+<div id="chat-box" class="chat-box mb-3">
+  {% for m in messages %}
+  <div class="chat-message {% if m['sender_id']==current_id %}self{% else %}other{% endif %}">
+    <div class="chat-bubble {% if m['sender_id']==current_id %}self{% else %}other{% endif %}">
+      {{ m['message'] }}
+      <div class="text-muted small mt-1">
+        {{ m['timestamp'] }}
+        {% if m['sender_id']==current_id %}
+        <span class="ms-2" data-id="{{ m['id'] }}" data-read="{{ 1 if m['is_read'] else 0 }}">{{ '既読' if m['is_read'] else '未読' }}</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+<form method="POST" id="chat-form" autocomplete="off">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+  <div class="input-group">
+    <input type="text" class="form-control" name="message" id="message-input" required>
+    <button type="submit" class="btn btn-primary">送信</button>
+  </div>
+</form>
+<script>
+const box = document.getElementById('chat-box');
+const currentId = {{ current_id }};
+let lastRead = '{{ last_read }}';
+const csrfToken = document.querySelector('input[name="_csrf_token"]').value;
+let earliest = {{ earliest }};
+let loading = false;
+
+async function markRead(){
+  const resp = await fetch('{{ url_for('mark_chat_read', partner_id=partner_id) }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: '_csrf_token=' + encodeURIComponent(csrfToken)
+  });
+  if(resp.ok){
+    const data = await resp.json();
+    if(data.updated){
+      lastRead = data.ts;
+    }
+  }
+}
+function appendMessage(m){
+  const wrap = document.createElement('div');
+  wrap.className = 'chat-message ' + (m.sender_id == currentId ? 'self' : 'other');
+  const bubble = document.createElement('div');
+  bubble.className = 'chat-bubble ' + (m.sender_id == currentId ? 'self' : 'other');
+  bubble.textContent = m.message;
+  const time = document.createElement('div');
+  time.className = 'text-muted small mt-1';
+  time.textContent = m.timestamp;
+  if(m.sender_id == currentId){
+    const span = document.createElement('span');
+    span.className = 'ms-2';
+    span.textContent = m.is_read ? '既読' : '未読';
+    time.appendChild(document.createTextNode(' '));
+    time.appendChild(span);
+  }
+  bubble.appendChild(time);
+  wrap.appendChild(bubble);
+  box.appendChild(wrap);
+  box.scrollTop = box.scrollHeight;
+}
+
+function prependMessage(m){
+  const wrap = document.createElement('div');
+  wrap.className = 'chat-message ' + (m.sender_id == currentId ? 'self' : 'other');
+  const bubble = document.createElement('div');
+  bubble.className = 'chat-bubble ' + (m.sender_id == currentId ? 'self' : 'other');
+  bubble.textContent = m.message;
+  const time = document.createElement('div');
+  time.className = 'text-muted small mt-1';
+  time.textContent = m.timestamp;
+  if(m.sender_id == currentId){
+    const span = document.createElement('span');
+    span.className = 'ms-2';
+    span.textContent = m.is_read ? '既読' : '未読';
+    time.appendChild(document.createTextNode(' '));
+    time.appendChild(span);
+  }
+  bubble.appendChild(time);
+  wrap.appendChild(bubble);
+  box.insertBefore(wrap, box.firstChild);
+}
+
+async function fetchHistory(){
+  if(loading || earliest <= 1){ return; }
+  loading = true;
+  const prevHeight = box.scrollHeight;
+  const resp = await fetch('{{ url_for('chat_history', partner_id=partner_id) }}?before=' + earliest);
+  if(resp.ok){
+    const data = await resp.json();
+    data.messages.forEach(prependMessage);
+    if(data.messages.length){
+      earliest = data.messages[0].id;
+      box.scrollTop = box.scrollHeight - prevHeight;
+    } else {
+      earliest = 0;
+    }
+  }
+  loading = false;
+  markRead();
+}
+if('Notification' in window && Notification.permission === 'default'){
+  Notification.requestPermission();
+}
+const evt = new EventSource('{{ url_for('sse_events') }}');
+evt.onmessage = e => {
+  const data = JSON.parse(e.data);
+  if(data.type === 'message' && data.sender_id == {{ partner_id }}){
+    appendMessage({sender_id: data.sender_id, message: data.message, timestamp: data.timestamp, is_read: false});
+    markRead();
+  }
+  if(data.type === 'read' && data.ids){
+    data.ids.forEach(id => {
+      const span = document.querySelector('span[data-id="' + id + '"]');
+      if(span && span.dataset.read == '0'){
+        span.textContent = '既読';
+        span.dataset.read = '1';
+      }
+    });
+    lastRead = new Date().toISOString().slice(0,19).replace('T',' ');
+  }
+};
+box.addEventListener('scroll', () => {
+  if(box.scrollTop === 0){
+    fetchHistory();
+  }
+});
+box.scrollTop = box.scrollHeight;
+markRead();
+</script>
+{% endblock %}
