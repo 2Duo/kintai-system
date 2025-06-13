@@ -15,6 +15,7 @@ from functools import wraps
 from dotenv import load_dotenv
 import smtplib
 from email.message import EmailMessage
+import subprocess
 
 load_dotenv()
 
@@ -235,6 +236,41 @@ def send_registration_email(to_email, name):
     except Exception as e:
         app.logger.error(f"メール送信に失敗しました: {e}")
 
+
+# === 8.2 アップデート管理 ===
+
+def get_git_commits():
+    """ローカルとリモートの最新コミットを取得する"""
+    try:
+        local = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True, check=True).stdout.strip()
+    except Exception:
+        return None, None
+    try:
+        subprocess.run(['git', 'fetch'], capture_output=True, text=True, check=True)
+        remote = subprocess.run(['git', 'rev-parse', 'origin/main'], capture_output=True, text=True, check=True).stdout.strip()
+    except Exception:
+        remote = None
+    return local, remote
+
+def get_changed_files():
+    """リモートとの差分ファイル一覧を取得する"""
+    try:
+        subprocess.run(['git', 'fetch'], capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            ['git', 'diff', '--name-only', 'HEAD', 'origin/main'],
+            capture_output=True, text=True, check=True
+        )
+        files = [f.strip() for f in result.stdout.splitlines() if f.strip()]
+        return files
+    except Exception:
+        return None
+
+def perform_git_pull():
+    try:
+        result = subprocess.run(['git', 'pull', '--ff-only'], capture_output=True, text=True, check=True)
+        return result.stdout.strip()
+    except Exception as e:
+        return str(e)
 
 # === 9. CSV出力ロジック一本化 ===
 def generate_csv(user_id, name, year, month, target_dir, overtime_threshold='18:00'):
@@ -941,6 +977,62 @@ def download_audit_log():
         as_attachment=True,
         mimetype='text/plain',
         download_name=os.path.basename(AUDIT_LOG_PATH)
+    )
+
+
+@app.route('/admin/update', methods=['GET', 'POST'])
+@superadmin_required
+def update_system():
+    local, remote = get_git_commits()
+    error = None
+    update_available = False
+    critical_changes = False
+    changed_files = []
+    if local is None:
+        error = 'Gitリポジトリではありません。'
+    elif remote is None:
+        error = 'リモートリポジトリが設定されていません。'
+    else:
+        update_available = local != remote
+        if update_available:
+            files = get_changed_files() or []
+            changed_files = files
+            for f in files:
+                if f.startswith('database/') or f == '.env.example':
+                    critical_changes = True
+                    break
+    if request.method == 'POST':
+        if not check_csrf():
+            return redirect(url_for('update_system'))
+        if critical_changes:
+            flash('重要なファイルが変更されているため自動アップデートできません。', 'danger')
+            return render_template(
+                'update.html',
+                local_commit=local,
+                remote_commit=remote,
+                update_available=True,
+                critical_changes=True,
+                changed_files=changed_files,
+                error=None,
+            )
+        message = perform_git_pull()
+        flash('アップデートを実行しました。サーバーを再起動してください。', 'success')
+        return render_template(
+            'update.html',
+            local_commit=local,
+            remote_commit=remote,
+            update_available=False,
+            error=None,
+            message=message,
+        )
+    return render_template(
+        'update.html',
+        local_commit=local,
+        remote_commit=remote,
+        update_available=update_available,
+        critical_changes=critical_changes,
+        changed_files=changed_files,
+        error=error,
     )
 
 @app.route('/setup', methods=['GET', 'POST'])
