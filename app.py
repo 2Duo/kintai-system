@@ -921,13 +921,27 @@ def mail_settings():
 @app.route('/admin/audit_log')
 @superadmin_required
 def view_audit_log():
-    if not os.path.exists(AUDIT_LOG_PATH):
-        lines = []
-    else:
+    if os.path.exists(AUDIT_LOG_PATH):
         with open(AUDIT_LOG_PATH, 'r', encoding='utf-8') as f:
             lines = f.readlines()
+    else:
+        lines = []
     lines = list(reversed(lines[-500:]))
-    return render_template('audit_log.html', log_lines=lines)
+    log_text = ''.join(lines)
+    return render_template('audit_log.html', log_text=log_text)
+
+
+@app.route('/admin/audit_log/download')
+@superadmin_required
+def download_audit_log():
+    if not os.path.exists(AUDIT_LOG_PATH):
+        return '監査ログがありません', 404
+    return send_file(
+        AUDIT_LOG_PATH,
+        as_attachment=True,
+        mimetype='text/plain',
+        download_name=os.path.basename(AUDIT_LOG_PATH)
+    )
 
 @app.route('/setup', methods=['GET', 'POST'])
 def setup():
