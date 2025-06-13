@@ -5,6 +5,10 @@
 .container {
   max-width: 900px;
 }
+#admin-frame {
+  border: none;
+  width: 100%;
+}
 </style>
 <h1 class="mb-4">管理ページ</h1>
 <div class="row">
@@ -20,8 +24,8 @@
       {% endif %}
     </div>
   </div>
-  <div class="col-md-9">
-    <iframe id="admin-frame" class="w-100" style="min-height:600px;border:none"></iframe>
+  <div class="col-md-9" id="admin-frame-wrapper" style="overflow:hidden">
+    <iframe id="admin-frame"></iframe>
   </div>
 </div>
 
@@ -29,6 +33,13 @@
 document.addEventListener('DOMContentLoaded', () => {
   const frame = document.getElementById('admin-frame');
   const links = document.querySelectorAll('#admin-menu a');
+
+  function setFrameHeight() {
+    const rect = frame.getBoundingClientRect();
+    frame.style.height = (window.innerHeight - rect.top) + 'px';
+  }
+
+  window.addEventListener('resize', setFrameHeight);
 
   function activate(link) {
     links.forEach(a => a.classList.remove('active'));
@@ -38,15 +49,21 @@ document.addEventListener('DOMContentLoaded', () => {
   links.forEach(link => {
     link.addEventListener('click', ev => {
       ev.preventDefault();
-      frame.src = link.href;
+      let url = link.href;
+      url += (url.includes('?') ? '&' : '?') + 'embedded=1';
+      frame.src = url;
       activate(link);
     });
   });
 
   if (links.length > 0) {
-    frame.src = links[0].href;
+    let url = links[0].href;
+    url += (url.includes('?') ? '&' : '?') + 'embedded=1';
+    frame.src = url;
     activate(links[0]);
   }
+
+  setFrameHeight();
 });
 </script>
 {% endblock %}

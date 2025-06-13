@@ -18,6 +18,7 @@
 </head>
 <body>
 <!-- すべてのPOSTフォームにはCSRFトークンをhiddenで埋め込むこと -->
+{% if not request.args.get('embedded') %}
 <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4">
   <div class="container-fluid">
     <a class="navbar-brand" href="{{ url_for('index') }}">勤怠管理</a>
@@ -45,6 +46,7 @@
     </div>
   </div>
 </nav>
+{% endif %}
 
 <div class="container">
 
@@ -73,6 +75,27 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 <!-- ▲▲▲ Service Worker登録スクリプト ▲▲▲ -->
+
+{% if request.args.get('embedded') %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('a').forEach(a => {
+    const url = new URL(a.getAttribute('href'), window.location.origin);
+    if (!url.searchParams.has('embedded')) {
+      url.searchParams.set('embedded', '1');
+      a.href = url.pathname + url.search + url.hash;
+    }
+  });
+  document.querySelectorAll('form').forEach(f => {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'embedded';
+    input.value = '1';
+    f.appendChild(input);
+  });
+});
+</script>
+{% endif %}
 
 </body>
 </html>
