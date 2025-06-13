@@ -181,6 +181,27 @@ def normalize_time_str(time_str):
     except ValueError:
         return time_str
 
+def calculate_overtime(out_time, threshold='18:00'):
+    """Calculate overtime string from out_time and threshold."""
+    try:
+        out_dt = datetime.strptime(out_time, '%H:%M')
+        th_dt = datetime.strptime(threshold or '18:00', '%H:%M')
+        if out_dt > th_dt:
+            delta = out_dt - th_dt
+            hours, minutes = divmod(delta.seconds // 60, 60)
+            return f"{hours:02d}:{minutes:02d}"
+    except ValueError:
+        return ''
+    return ''
+
+def fetch_overtime_threshold(user_id, default='18:00'):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT overtime_threshold FROM users WHERE id = ?", (user_id,))
+    row = c.fetchone()
+    conn.close()
+    return row['overtime_threshold'] if row and row['overtime_threshold'] else default
+
 # === 8.1 メール設定管理 ===
 def get_mail_settings():
     conn = get_db()
@@ -307,17 +328,7 @@ def generate_csv(user_id, name, year, month, target_dir, overtime_threshold='18:
             data = daily_data[day]
             dt = datetime.strptime(day, '%Y/%m/%d')
             weekday = '月火水木金土日'[dt.weekday()]
-            overtime = ''
-            if data['out']:
-                try:
-                    out_dt = datetime.strptime(data['out'], '%H:%M')
-                    th_dt = datetime.strptime(overtime_threshold or '18:00', '%H:%M')
-                    if out_dt > th_dt:
-                        delta = out_dt - th_dt
-                        h, m = divmod(delta.seconds // 60, 60)
-                        overtime = f"{h:02d}:{m:02d}"
-                except ValueError:
-                    pass
+            overtime = calculate_overtime(data['out'], overtime_threshold) if data['out'] else ''
             writer.writerow([day, weekday, data['in'], data['out'], data['description'], overtime])
     return filepath
 
@@ -629,9 +640,7 @@ def view_my_logs():
     user_id = session['user_id']
     conn = get_db()
     c = conn.cursor()
-    c.execute("SELECT overtime_threshold FROM users WHERE id = ?", (user_id,))
-    row = c.fetchone()
-    overtime_threshold = row['overtime_threshold'] if row else '18:00'
+    overtime_threshold = fetch_overtime_threshold(user_id)
     c.execute("SELECT timestamp, type, description FROM attendance WHERE user_id = ? ORDER BY timestamp", (user_id,))
     records = c.fetchall()
     conn.close()
@@ -647,16 +656,7 @@ def view_my_logs():
         attendance_by_day[date][typ] = {'time': time, 'description': desc}
     for date, data in attendance_by_day.items():
         if data['out']:
-            out_time = data['out']['time']
-            try:
-                out_dt = datetime.strptime(out_time, '%H:%M')
-                th_dt = datetime.strptime(overtime_threshold, '%H:%M')
-                if out_dt > th_dt:
-                    delta = out_dt - th_dt
-                    hours, minutes = divmod(delta.seconds // 60, 60)
-                    data['overtime'] = f"{hours:02d}:{minutes:02d}"
-            except ValueError:
-                data['overtime'] = ''
+            data['overtime'] = calculate_overtime(data['out']['time'], overtime_threshold)
         else:
             data['overtime'] = ''
     return render_template('my_logs.html', logs=attendance_by_day)
@@ -721,13 +721,6 @@ def export_combined():
             return redirect(url_for('export_combined'))
         year = int(request.form['year'])
         month = int(request.form['month'])
-        def get_overtime_threshold(uid):
-            conn = get_db()
-            c = conn.cursor()
-            c.execute("SELECT overtime_threshold FROM users WHERE id = ?", (uid,))
-            row = c.fetchone()
-            conn.close()
-            return row['overtime_threshold'] if row and row['overtime_threshold'] else '18:00'
         if request.form['action'] == 'single_user':
             user_id = int(request.form['user_id'])
             conn = get_db()
@@ -740,7 +733,7 @@ def export_combined():
             name = row['name']
             export_subdir = os.path.join(EXPORT_DIR, f"{year}", f"{month:02d}")
             os.makedirs(export_subdir, exist_ok=True)
-            csv_path = generate_csv(user_id, name, year, month, export_subdir, get_overtime_threshold(user_id))
+            csv_path = generate_csv(user_id, name, year, month, export_subdir, fetch_overtime_threshold(user_id))
             if not csv_path:
                 flash('該当データがありません。', 'warning')
                 return redirect(url_for('export_combined'))
@@ -751,7 +744,7 @@ def export_combined():
                 any_file = False
                 with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                     for user_id, name in user_list:
-                        csv_file = generate_csv(user_id, name, year, month, temp_dir, get_overtime_threshold(user_id))
+                        csv_file = generate_csv(user_id, name, year, month, temp_dir, fetch_overtime_threshold(user_id))
                         if csv_file:
                             zipf.write(csv_file, os.path.basename(csv_file))
                             any_file = True
