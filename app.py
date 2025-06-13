@@ -203,13 +203,13 @@ def handle_file_too_large(e):
 
 # === 7. DB初期化 ===
 def initialize_database():
-    if not os.path.exists(DB_PATH):
-        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-        conn = sqlite3.connect(DB_PATH)
-        with open(os.path.join(os.path.dirname(__file__), 'database', 'schema.sql'), encoding='utf-8') as f:
-            conn.executescript(f.read())
-        conn.commit()
-        conn.close()
+    """テーブルとインデックスを確実に作成する"""
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    with open(os.path.join(os.path.dirname(__file__), 'database', 'schema.sql'), encoding='utf-8') as f:
+        conn.executescript(f.read())
+    conn.commit()
+    conn.close()
 initialize_database()
 
 # === 8. 各種ユーティリティ ===
