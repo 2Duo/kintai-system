@@ -787,8 +787,14 @@ def chat(partner_id):
             )
             conn.commit()
     c.execute(
+        "UPDATE messages SET is_read = 1 WHERE sender_id = ? AND recipient_id = ? AND is_read = 0",
+        (partner_id, current_id),
+    )
+    conn.commit()
+    c.execute(
         """
-        SELECT sender_id, recipient_id, message, timestamp FROM messages
+        SELECT sender_id, recipient_id, message, timestamp, is_read
+        FROM messages
         WHERE (sender_id = ? AND recipient_id = ?) OR
               (sender_id = ? AND recipient_id = ?)
         ORDER BY timestamp
@@ -796,11 +802,6 @@ def chat(partner_id):
         (current_id, partner_id, partner_id, current_id),
     )
     messages = c.fetchall()
-    c.execute(
-        "UPDATE messages SET is_read = 1 WHERE sender_id = ? AND recipient_id = ? AND is_read = 0",
-        (partner_id, current_id),
-    )
-    conn.commit()
     conn.close()
     partner_name = fetch_user_name(partner_id)
     return render_template(
@@ -823,7 +824,8 @@ def poll_chat(partner_id):
     c = conn.cursor()
     c.execute(
         """
-        SELECT id, sender_id, recipient_id, message, timestamp FROM messages
+        SELECT id, sender_id, recipient_id, message, timestamp, is_read
+        FROM messages
         WHERE ((sender_id = ? AND recipient_id = ?) OR
                (sender_id = ? AND recipient_id = ?)) AND timestamp > ?
         ORDER BY timestamp

@@ -7,7 +7,12 @@
   <div class="chat-message {% if m['sender_id']==current_id %}self{% else %}other{% endif %}">
     <div class="chat-bubble {% if m['sender_id']==current_id %}self{% else %}other{% endif %}">
       {{ m['message'] }}
-      <div class="text-muted small mt-1">{{ m['timestamp'] }}</div>
+      <div class="text-muted small mt-1">
+        {{ m['timestamp'] }}
+        {% if m['sender_id']==current_id %}
+        <span class="ms-2">{{ '既読' if m['is_read'] else '未読' }}</span>
+        {% endif %}
+      </div>
     </div>
   </div>
   {% endfor %}
@@ -32,6 +37,13 @@ function appendMessage(m){
   const time = document.createElement('div');
   time.className = 'text-muted small mt-1';
   time.textContent = m.timestamp;
+  if(m.sender_id == currentId){
+    const span = document.createElement('span');
+    span.className = 'ms-2';
+    span.textContent = m.is_read ? '既読' : '未読';
+    time.appendChild(document.createTextNode(' '));
+    time.appendChild(span);
+  }
   bubble.appendChild(time);
   wrap.appendChild(bubble);
   box.appendChild(wrap);
@@ -48,11 +60,15 @@ async function poll(){
       }
       last = m.timestamp;
     });
+    if(data.messages.length){
+      updateUnread();
+    }
   }
 }
 if('Notification' in window && Notification.permission === 'default'){
   Notification.requestPermission();
 }
 setInterval(poll, 5000);
+box.scrollTop = box.scrollHeight;
 </script>
 {% endblock %}
