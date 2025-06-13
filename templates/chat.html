@@ -10,7 +10,7 @@
       <div class="text-muted small mt-1">
         {{ m['timestamp'] }}
         {% if m['sender_id']==current_id %}
-        <span class="ms-2">{{ '既読' if m['is_read'] else '未読' }}</span>
+        <span class="ms-2" data-id="{{ m['id'] }}" data-read="{{ 1 if m['is_read'] else 0 }}">{{ '既読' if m['is_read'] else '未読' }}</span>
         {% endif %}
       </div>
     </div>
@@ -28,6 +28,7 @@
 const box = document.getElementById('chat-box');
 const currentId = {{ current_id }};
 let last = '{{ messages[-1]["timestamp"] if messages else "" }}';
+let lastRead = '{{ last_read }}';
 function appendMessage(m){
   const wrap = document.createElement('div');
   wrap.className = 'chat-message ' + (m.sender_id == currentId ? 'self' : 'other');
@@ -50,7 +51,8 @@ function appendMessage(m){
   box.scrollTop = box.scrollHeight;
 }
 async function poll(){
-  const resp = await fetch('{{ url_for('poll_chat', partner_id=partner_id) }}?after=' + encodeURIComponent(last));
+  const url = '{{ url_for('poll_chat', partner_id=partner_id) }}?after=' + encodeURIComponent(last) + '&after_read=' + encodeURIComponent(lastRead);
+  const resp = await fetch(url);
   if(resp.ok){
     const data = await resp.json();
     data.messages.forEach(m => {
@@ -60,7 +62,17 @@ async function poll(){
       }
       last = m.timestamp;
     });
-    if(data.messages.length){
+    data.reads.forEach(id => {
+      const span = document.querySelector('span[data-id="' + id + '"]');
+      if(span && span.dataset.read == '0'){
+        span.textContent = '既読';
+        span.dataset.read = '1';
+      }
+    });
+    if(data.reads.length){
+      lastRead = new Date().toISOString().slice(0,19).replace('T',' ');
+    }
+    if(data.messages.length || data.reads.length){
       updateUnread();
     }
   }

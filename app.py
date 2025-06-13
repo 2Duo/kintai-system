@@ -787,13 +787,13 @@ def chat(partner_id):
             )
             conn.commit()
     c.execute(
-        "UPDATE messages SET is_read = 1 WHERE sender_id = ? AND recipient_id = ? AND is_read = 0",
-        (partner_id, current_id),
+        "UPDATE messages SET is_read = 1, read_timestamp = ? WHERE sender_id = ? AND recipient_id = ? AND is_read = 0",
+        (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), partner_id, current_id),
     )
     conn.commit()
     c.execute(
         """
-        SELECT sender_id, recipient_id, message, timestamp, is_read
+        SELECT id, sender_id, recipient_id, message, timestamp, is_read, read_timestamp
         FROM messages
         WHERE (sender_id = ? AND recipient_id = ?) OR
               (sender_id = ? AND recipient_id = ?)
@@ -802,6 +802,11 @@ def chat(partner_id):
         (current_id, partner_id, partner_id, current_id),
     )
     messages = c.fetchall()
+    last_read = ''
+    for m in messages:
+        rt = m['read_timestamp']
+        if rt and rt > last_read:
+            last_read = rt
     conn.close()
     partner_name = fetch_user_name(partner_id)
     return render_template(
@@ -810,6 +815,7 @@ def chat(partner_id):
         partner_id=partner_id,
         partner_name=partner_name,
         current_id=current_id,
+        last_read=last_read,
     )
 
 
@@ -818,13 +824,14 @@ def chat(partner_id):
 def poll_chat(partner_id):
     current_id = session['user_id']
     if not can_chat(current_id, partner_id):
-        return {'messages': []}
+        return {'messages': [], 'reads': []}
     after = request.args.get('after', '1970-01-01 00:00:00')
+    after_read = request.args.get('after_read', '1970-01-01 00:00:00')
     conn = get_db()
     c = conn.cursor()
     c.execute(
         """
-        SELECT id, sender_id, recipient_id, message, timestamp, is_read
+        SELECT id, sender_id, recipient_id, message, timestamp, is_read, read_timestamp
         FROM messages
         WHERE ((sender_id = ? AND recipient_id = ?) OR
                (sender_id = ? AND recipient_id = ?)) AND timestamp > ?
@@ -835,12 +842,17 @@ def poll_chat(partner_id):
     rows = [dict(r) for r in c.fetchall()]
     if rows:
         c.execute(
-            "UPDATE messages SET is_read = 1 WHERE sender_id = ? AND recipient_id = ? AND is_read = 0",
-            (partner_id, current_id),
+            "UPDATE messages SET is_read = 1, read_timestamp = ? WHERE sender_id = ? AND recipient_id = ? AND is_read = 0",
+            (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), partner_id, current_id),
         )
         conn.commit()
+    c.execute(
+        "SELECT id FROM messages WHERE sender_id = ? AND recipient_id = ? AND is_read = 1 AND read_timestamp > ?",
+        (current_id, partner_id, after_read),
+    )
+    read_ids = [r['id'] for r in c.fetchall()]
     conn.close()
-    return {'messages': rows}
+    return {'messages': rows, 'reads': read_ids}
 
 
 @app.route('/chat/unread_count')

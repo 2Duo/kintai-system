@@ -82,3 +82,8 @@ textarea {
     color: #000;
     border-bottom-left-radius: 0;
 }
+
+/* ナビゲーションの未読バッジ位置調整 */
+.nav-link .badge {
+    vertical-align: top;
+}

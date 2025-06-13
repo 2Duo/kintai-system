@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS messages (
     message TEXT NOT NULL,
     timestamp TEXT NOT NULL,
     is_read INTEGER DEFAULT 0,
+    read_timestamp TEXT,
     FOREIGN KEY(sender_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY(recipient_id) REFERENCES users(id) ON DELETE CASCADE
 );
