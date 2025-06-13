@@ -104,6 +104,27 @@ textarea {
     max-width: 600px;
     margin: 0 auto;
 }
-.chat-list .list-group-item {
-    cursor: pointer;
+.chat-list .list-group-item-action {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.chat-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #e5e5ea;
+    color: #000;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+}
+
+.chat-list .list-group-item-action::after {
+    content: '\203A';
+    margin-left: auto;
+    color: #8e8e93;
+    font-size: 1.25rem;
 }
