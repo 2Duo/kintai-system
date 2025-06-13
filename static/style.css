@@ -51,3 +51,34 @@ textarea {
     background-color: #8e8e93;
     color: #fff;
 }
+
+/* チャット用スタイル */
+.chat-box {
+    height: 300px;
+    overflow-y: auto;
+    border: 1px solid #ccc;
+    padding: 10px;
+    background: #f9f9f9;
+}
+.chat-message {
+    display: flex;
+    margin-bottom: 0.5rem;
+}
+.chat-message.self {
+    justify-content: flex-end;
+}
+.chat-bubble {
+    max-width: 70%;
+    padding: 0.5rem 1rem;
+    border-radius: 1rem;
+}
+.chat-bubble.self {
+    background: #007aff;
+    color: #fff;
+    border-bottom-right-radius: 0;
+}
+.chat-bubble.other {
+    background: #e5e5ea;
+    color: #000;
+    border-bottom-left-radius: 0;
+}

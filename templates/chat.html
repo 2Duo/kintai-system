@@ -2,11 +2,13 @@
 {% block title %}チャット{% endblock %}
 {% block content %}
 <h1>チャット - {{ partner_name }}</h1>
-<div id="chat-box" style="height:300px; overflow-y:scroll; border:1px solid #ccc; padding:10px;" class="mb-3">
+<div id="chat-box" class="chat-box mb-3">
   {% for m in messages %}
-  <div><strong>{{ '自分' if m['sender_id']==current_id else partner_name }}:</strong>
-    {{ m['message'] }}
-    <span class="text-muted" style="font-size:smaller">{{ m['timestamp'] }}</span>
+  <div class="chat-message {% if m['sender_id']==current_id %}self{% else %}other{% endif %}">
+    <div class="chat-bubble {% if m['sender_id']==current_id %}self{% else %}other{% endif %}">
+      {{ m['message'] }}
+      <div class="text-muted small mt-1">{{ m['timestamp'] }}</div>
+    </div>
   </div>
   {% endfor %}
 </div>
@@ -19,13 +21,20 @@
 </form>
 <script>
 const box = document.getElementById('chat-box');
+const currentId = {{ current_id }};
 let last = '{{ messages[-1]["timestamp"] if messages else "" }}';
 function appendMessage(m){
-  const div = document.createElement('div');
-  const sender = m.sender_id == {{ current_id }} ? '自分' : {{ partner_name|tojson }};
-  div.innerHTML = '<strong>' + sender + ':</strong> ' + m.message +
-    ' <span class="text-muted" style="font-size:smaller">' + m.timestamp + '</span>';
-  box.appendChild(div);
+  const wrap = document.createElement('div');
+  wrap.className = 'chat-message ' + (m.sender_id == currentId ? 'self' : 'other');
+  const bubble = document.createElement('div');
+  bubble.className = 'chat-bubble ' + (m.sender_id == currentId ? 'self' : 'other');
+  bubble.textContent = m.message;
+  const time = document.createElement('div');
+  time.className = 'text-muted small mt-1';
+  time.textContent = m.timestamp;
+  bubble.appendChild(time);
+  wrap.appendChild(bubble);
+  box.appendChild(wrap);
   box.scrollTop = box.scrollHeight;
 }
 async function poll(){
