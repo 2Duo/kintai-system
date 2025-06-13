@@ -1,26 +1,52 @@
 body {
-    font-family: sans-serif;
-    background-color: #f4f4f4;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue",
+        "Segoe UI", Roboto, sans-serif;
+    background-color: #f2f2f7;
     text-align: center;
-    padding-top: 0;
-    font-size: 1.1rem; /* larger default font for readability */
-    color: #000;
+    font-size: 1.1rem;
+    color: #1d1d1f;
 }
+
 .container {
-    background: white;
+    background: #fff;
     display: inline-block;
-    padding: 30px;
-    border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0,0,0,0.1);
-    max-width: 500px;
-    margin: auto;
+    padding: 40px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    max-width: 600px;
+    margin: 2rem auto;
 }
-input, button {
-    margin: 10px;
-    padding: 10px;
-    font-size: 16px;
+
+input,
+button,
+textarea {
+    margin: 0.5rem 0;
+    padding: 0.75rem;
+    font-size: 1rem;
 }
 
 .btn {
-    min-height: 44px; /* easier touch target */
+    min-height: 44px;
+    border-radius: 0.5rem;
+    padding: 0.5rem 1rem;
+}
+
+.btn-primary {
+    background-color: #007aff;
+    border-color: #007aff;
+}
+.btn-primary:hover,
+.btn-primary:active {
+    background-color: #0060df;
+    border-color: #0060df;
+}
+
+.btn-outline-secondary {
+    border-color: #8e8e93;
+    color: #8e8e93;
+}
+.btn-outline-secondary:hover,
+.btn-outline-secondary:active {
+    background-color: #8e8e93;
+    color: #fff;
 }
