@@ -9,7 +9,7 @@
 <h1 class="mb-4">管理ページ</h1>
 <div class="row">
   <div class="col-md-3 mb-3">
-    <div class="list-group">
+    <div class="list-group" id="admin-menu">
       <a href="{{ url_for('export_combined') }}" class="list-group-item list-group-item-action">CSV管理</a>
       <a href="{{ url_for('create_user') }}" class="list-group-item list-group-item-action">ユーザー作成</a>
       <a href="{{ url_for('list_users') }}" class="list-group-item list-group-item-action">ユーザー管理</a>
@@ -21,7 +21,32 @@
     </div>
   </div>
   <div class="col-md-9">
-    <p>こんにちは、{{ session.get('user_name') }}さん</p>
+    <iframe id="admin-frame" class="w-100" style="min-height:600px;border:none"></iframe>
   </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const frame = document.getElementById('admin-frame');
+  const links = document.querySelectorAll('#admin-menu a');
+
+  function activate(link) {
+    links.forEach(a => a.classList.remove('active'));
+    link.classList.add('active');
+  }
+
+  links.forEach(link => {
+    link.addEventListener('click', ev => {
+      ev.preventDefault();
+      frame.src = link.href;
+      activate(link);
+    });
+  });
+
+  if (links.length > 0) {
+    frame.src = links[0].href;
+    activate(links[0]);
+  }
+});
+</script>
 {% endblock %}
