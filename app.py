@@ -825,17 +825,19 @@ def chat(partner_id):
                 "timestamp": ts
             })
             push_unread(partner_id)
+    limit = 20
     c.execute(
         """
         SELECT id, sender_id, recipient_id, message, timestamp, is_read, read_timestamp
         FROM messages
         WHERE (sender_id = ? AND recipient_id = ?) OR
               (sender_id = ? AND recipient_id = ?)
-        ORDER BY timestamp
+        ORDER BY id DESC LIMIT ?
         """,
-        (current_id, partner_id, partner_id, current_id),
+        (current_id, partner_id, partner_id, current_id, limit),
     )
-    messages = c.fetchall()
+    messages = c.fetchall()[::-1]
+    earliest = messages[0]['id'] if messages else 0
     last_read = ''
     for m in messages:
         rt = m['read_timestamp']
@@ -850,6 +852,7 @@ def chat(partner_id):
         partner_name=partner_name,
         current_id=current_id,
         last_read=last_read,
+        earliest=earliest,
     )
 
 
@@ -881,6 +884,34 @@ def poll_chat(partner_id):
     read_ids = [r['id'] for r in c.fetchall()]
     conn.close()
     return {'messages': rows, 'reads': read_ids}
+
+
+@app.route('/chat/history/<int:partner_id>')
+@login_required
+def chat_history(partner_id):
+    current_id = session['user_id']
+    if not can_chat(current_id, partner_id):
+        return {'messages': []}
+    before_id = int(request.args.get('before', 0))
+    limit = int(request.args.get('limit', 20))
+    conn = get_db()
+    c = conn.cursor()
+    query = """
+        SELECT id, sender_id, recipient_id, message, timestamp, is_read, read_timestamp
+        FROM messages
+        WHERE ((sender_id = ? AND recipient_id = ?) OR
+               (sender_id = ? AND recipient_id = ?))
+    """
+    params = [current_id, partner_id, partner_id, current_id]
+    if before_id:
+        query += " AND id < ?"
+        params.append(before_id)
+    query += " ORDER BY id DESC LIMIT ?"
+    params.append(limit)
+    c.execute(query, params)
+    rows = [dict(r) for r in c.fetchall()][::-1]
+    conn.close()
+    return {'messages': rows}
 
 
 @app.route('/chat/mark_read/<int:partner_id>', methods=['POST'])
