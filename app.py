@@ -61,14 +61,39 @@ def is_valid_time(time_str):
         return False
 
 # === 2b. 監査ログ ===
+def get_client_info(ua):
+    """User-Agent から端末種別とOS名を推測する"""
+    ua_lower = (ua or '').lower()
+    if 'android' in ua_lower:
+        os_name = 'Android'
+    elif 'iphone' in ua_lower or 'ipad' in ua_lower or 'ios' in ua_lower:
+        os_name = 'iOS'
+    elif 'windows' in ua_lower:
+        os_name = 'Windows'
+    elif 'mac os x' in ua_lower or 'macintosh' in ua_lower:
+        os_name = 'macOS'
+    elif 'linux' in ua_lower:
+        os_name = 'Linux'
+    else:
+        os_name = '-'
+
+    if 'ipad' in ua_lower or 'tablet' in ua_lower or ('android' in ua_lower and 'mobile' not in ua_lower):
+        device = 'tablet'
+    elif 'iphone' in ua_lower or ('android' in ua_lower and 'mobile' in ua_lower):
+        device = 'smartphone'
+    else:
+        device = 'pc'
+    return device, os_name
+
 def log_audit_event(action, user_id=None, user_name=None):
     """監査ログにイベントを記録する"""
     ip = request.remote_addr or '-'
-    ua = request.headers.get('User-Agent', '-')
+    ua = request.headers.get('User-Agent', '')
+    device, os_name = get_client_info(ua)
     ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     line = (
         f"{ts}\t{action}\t{user_id if user_id else '-'}\t"
-        f"{user_name if user_name else '-'}\t{ip}\t{ua}\n"
+        f"{user_name if user_name else '-'}\t{ip}\t{device}\t{os_name}\n"
     )
     with open(AUDIT_LOG_PATH, 'a', encoding='utf-8') as f:
         f.write(line)

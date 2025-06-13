@@ -26,6 +26,7 @@
 - （スーパー管理者）監査ログの閲覧
   - ログインや打刻時の操作履歴を記録する`.log`ファイルを表示します
   - サービス起動時にログは空になります
+  - 端末種別（pc / smartphone / tablet）とOSを記録します
 
 ---
 
@@ -125,7 +126,8 @@ GitHub等にアップロードする際は、`.env`は**絶対に公開しない
 - `FLASK_DEBUG` ... `1` でデバッグモード有効（未設定・0で無効）
 - `MAX_CONTENT_LENGTH` ... アップロード可能なCSVの最大バイト数（例: 10485760）
 - `AUDIT_LOG_PATH` ... 監査ログファイルの出力パス（省略時は `logs/audit.log`）
-  - 行は `timestamp\taction\tuser_id\tuser_name\tIP\tUser-Agent` の形式
+  - 行は `timestamp\taction\tuser_id\tuser_name\tIP\tdevice\tOS` の形式
+    - `device` は `pc` / `smartphone` / `tablet`
     - `timestamp` は `YYYY-MM-DD HH:MM:SS`
 
 ---
