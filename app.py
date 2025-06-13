@@ -485,6 +485,12 @@ def download_export_file(filename):
 def my_page():
     return render_template('my_page.html')
 
+
+@app.route('/admin')
+@admin_required
+def admin_dashboard():
+    return render_template('admin_dashboard.html')
+
 @app.route('/my/password', methods=['GET', 'POST'])
 @login_required
 def my_password():
