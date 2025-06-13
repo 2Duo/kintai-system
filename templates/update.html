@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}アップデート{% endblock %}
+{% block content %}
+<h1 class="mb-3">アップデート</h1>
+{% if error %}
+<div class="alert alert-danger">{{ error }}</div>
+{% else %}
+<p>現在のコミット: <code>{{ local_commit }}</code></p>
+{% if remote_commit %}
+<p>最新のコミット: <code>{{ remote_commit }}</code></p>
+{% if update_available %}
+{% if critical_changes %}
+<div class="alert alert-danger">データベースや設定ファイルが変更されています。自動アップデートはできません。</div>
+{% else %}
+<div class="alert alert-warning">更新があります。</div>
+<form method="POST">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+  <button type="submit" class="btn btn-primary">アップデート実行</button>
+</form>
+{% endif %}
+{% if changed_files %}
+<details class="mt-3"><summary>変更ファイル一覧</summary>
+<ul>
+{% for f in changed_files %}
+  <li>{{ f }}</li>
+{% endfor %}
+</ul>
+</details>
+{% endif %}
+{% else %}
+<div class="alert alert-success">最新版です。</div>
+{% endif %}
+{% endif %}
+{% if message %}
+<pre class="mt-3">{{ message }}</pre>
+{% endif %}
+{% endif %}
+{% endblock %}
+
