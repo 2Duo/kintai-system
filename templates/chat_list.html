@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block title %}チャット{% endblock %}
+{% block content %}
+<h1>チャット</h1>
+<ul class="list-group">
+  {% for u in users %}
+  <li class="list-group-item">
+    <a href="{{ url_for('admin_chat', user_id=u['id']) }}">{{ u['name'] }}</a>
+  </li>
+  {% endfor %}
+</ul>
+{% endblock %}

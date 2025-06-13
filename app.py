@@ -718,6 +718,148 @@ def edit_log(date):
             description = desc or ''
     return render_template('edit_log.html', date=date, in_time=in_time, out_time=out_time, description=description)
 
+
+def can_chat(current_id, partner_id):
+    conn = get_db()
+    c = conn.cursor()
+    if session.get('is_admin'):
+        c.execute(
+            "SELECT 1 FROM admin_managed_users WHERE admin_id = ? AND user_id = ?",
+            (current_id, partner_id),
+        )
+    else:
+        c.execute(
+            "SELECT 1 FROM admin_managed_users WHERE admin_id = ? AND user_id = ?",
+            (partner_id, current_id),
+        )
+    allowed = c.fetchone() is not None
+    conn.close()
+    return allowed
+
+
+def fetch_user_name(user_id):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT name FROM users WHERE id = ?", (user_id,))
+    row = c.fetchone()
+    conn.close()
+    return row['name'] if row else ''
+
+
+@app.route('/chat/<int:partner_id>', methods=['GET', 'POST'])
+@login_required
+def chat(partner_id):
+    current_id = session['user_id']
+    if not can_chat(current_id, partner_id):
+        return 'アクセス拒否'
+    conn = get_db()
+    c = conn.cursor()
+    if request.method == 'POST':
+        if not check_csrf():
+            conn.close()
+            return redirect(url_for('chat', partner_id=partner_id))
+        message = request.form.get('message', '').strip()
+        if message:
+            c.execute(
+                "INSERT INTO messages (sender_id, recipient_id, message, timestamp)"
+                " VALUES (?, ?, ?, ?)",
+                (
+                    current_id,
+                    partner_id,
+                    message,
+                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                ),
+            )
+            conn.commit()
+    c.execute(
+        """
+        SELECT sender_id, recipient_id, message, timestamp FROM messages
+        WHERE (sender_id = ? AND recipient_id = ?) OR
+              (sender_id = ? AND recipient_id = ?)
+        ORDER BY timestamp
+        """,
+        (current_id, partner_id, partner_id, current_id),
+    )
+    messages = c.fetchall()
+    conn.close()
+    partner_name = fetch_user_name(partner_id)
+    return render_template(
+        'chat.html',
+        messages=messages,
+        partner_id=partner_id,
+        partner_name=partner_name,
+        current_id=current_id,
+    )
+
+
+@app.route('/chat/poll/<int:partner_id>')
+@login_required
+def poll_chat(partner_id):
+    current_id = session['user_id']
+    if not can_chat(current_id, partner_id):
+        return {'messages': []}
+    after = request.args.get('after', '1970-01-01 00:00:00')
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT id, sender_id, recipient_id, message, timestamp FROM messages
+        WHERE ((sender_id = ? AND recipient_id = ?) OR
+               (sender_id = ? AND recipient_id = ?)) AND timestamp > ?
+        ORDER BY timestamp
+        """,
+        (current_id, partner_id, partner_id, current_id, after),
+    )
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return {'messages': rows}
+
+
+@app.route('/my/chat')
+@login_required
+def my_chat():
+    if session.get('is_admin'):
+        return redirect(url_for('admin_chat_index'))
+    user_id = session['user_id']
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        "SELECT admin_id FROM admin_managed_users WHERE user_id = ? ORDER BY admin_id LIMIT 1",
+        (user_id,),
+    )
+    row = c.fetchone()
+    conn.close()
+    if not row:
+        return 'チャット可能な管理者が設定されていません'
+    return redirect(url_for('chat', partner_id=row['admin_id']))
+
+
+@app.route('/admin/chat')
+@admin_required
+def admin_chat_index():
+    admin_id = session['user_id']
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT u.id, u.name FROM users u
+        INNER JOIN admin_managed_users m ON u.id = m.user_id
+        WHERE m.admin_id = ? ORDER BY u.name
+        """,
+        (admin_id,),
+    )
+    users = c.fetchall()
+    conn.close()
+    return render_template('chat_list.html', users=users)
+
+
+@app.route('/admin/chat/<int:user_id>')
+@admin_required
+def admin_chat(user_id):
+    if not can_chat(session['user_id'], user_id):
+        return 'アクセス拒否'
+    return redirect(url_for('chat', partner_id=user_id))
+
 @app.route('/admin/export', methods=['GET', 'POST'])
 @admin_required
 def export_combined():
@@ -933,6 +1075,10 @@ def delete_user(user_id):
             flash("スーパー管理者は削除できません。", "danger")
             conn.close()
             return redirect_embedded('list_users')
+        c.execute(
+            "DELETE FROM messages WHERE sender_id = ? OR recipient_id = ?",
+            (user_id, user_id),
+        )
         c.execute("DELETE FROM users WHERE id = ?", (user_id,))
         conn.commit()
         conn.close()

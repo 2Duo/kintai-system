@@ -20,6 +20,7 @@
       <a href="{{ url_for('export_combined') }}" class="list-group-item list-group-item-action">CSV管理</a>
       <a href="{{ url_for('create_user') }}" class="list-group-item list-group-item-action">ユーザー作成</a>
       <a href="{{ url_for('list_users') }}" class="list-group-item list-group-item-action">ユーザー管理</a>
+      <a href="{{ url_for('admin_chat_index') }}" class="list-group-item list-group-item-action">チャット</a>
       {% if session.get('is_superadmin') %}
       <a href="{{ url_for('mail_settings') }}" class="list-group-item list-group-item-action">メール設定</a>
       <a href="{{ url_for('view_audit_log') }}" class="list-group-item list-group-item-action">監査ログ</a>

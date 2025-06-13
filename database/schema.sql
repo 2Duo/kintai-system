@@ -39,3 +39,14 @@ CREATE TABLE IF NOT EXISTS mail_settings (
     subject_template TEXT,
     body_template TEXT
 );
+
+-- チャットメッセージ
+CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sender_id INTEGER NOT NULL,
+    recipient_id INTEGER NOT NULL,
+    message TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    FOREIGN KEY(sender_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY(recipient_id) REFERENCES users(id) ON DELETE CASCADE
+);

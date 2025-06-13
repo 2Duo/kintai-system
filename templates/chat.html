@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% block title %}チャット{% endblock %}
+{% block content %}
+<h1>チャット - {{ partner_name }}</h1>
+<div id="chat-box" style="height:300px; overflow-y:scroll; border:1px solid #ccc; padding:10px;" class="mb-3">
+  {% for m in messages %}
+  <div><strong>{{ '自分' if m['sender_id']==current_id else partner_name }}:</strong>
+    {{ m['message'] }}
+    <span class="text-muted" style="font-size:smaller">{{ m['timestamp'] }}</span>
+  </div>
+  {% endfor %}
+</div>
+<form method="POST" id="chat-form" autocomplete="off">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+  <div class="input-group">
+    <input type="text" class="form-control" name="message" id="message-input" required>
+    <button type="submit" class="btn btn-primary">送信</button>
+  </div>
+</form>
+<script>
+const box = document.getElementById('chat-box');
+let last = '{{ messages[-1]["timestamp"] if messages else "" }}';
+function appendMessage(m){
+  const div = document.createElement('div');
+  const sender = m.sender_id == {{ current_id }} ? '自分' : {{ partner_name|tojson }};
+  div.innerHTML = '<strong>' + sender + ':</strong> ' + m.message +
+    ' <span class="text-muted" style="font-size:smaller">' + m.timestamp + '</span>';
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+async function poll(){
+  const resp = await fetch('{{ url_for('poll_chat', partner_id=partner_id) }}?after=' + encodeURIComponent(last));
+  if(resp.ok){
+    const data = await resp.json();
+    data.messages.forEach(m => {
+      appendMessage(m);
+      if(Notification.permission === 'granted' && m.sender_id != {{ current_id }}){
+        new Notification({{ partner_name|tojson }}, {body: m.message});
+      }
+      last = m.timestamp;
+    });
+  }
+}
+if('Notification' in window && Notification.permission === 'default'){
+  Notification.requestPermission();
+}
+setInterval(poll, 5000);
+</script>
+{% endblock %}
