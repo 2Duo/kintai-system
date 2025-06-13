@@ -9,6 +9,7 @@
 
 ### 一般ユーザー機能
 - ログイン（メール + パスワード）
+- 一定期間ブラウザを閉じてもログイン状態を保持
 - 出退勤の手動打刻（時間入力可能、業務内容記録付き）
 - 勤怠履歴の閲覧・編集（日別に1出勤・1退勤）
 - 勤怠データのCSVインポート（確認ダイアログで差分選択）
@@ -129,6 +130,7 @@ GitHub等にアップロードする際は、`.env`は**絶対に公開しない
 - `DB_PATH` ... SQLiteデータベースパス（必要に応じて環境ごとに変更）
 - `FLASK_DEBUG` ... `1` でデバッグモード有効（未設定・0で無効）
 - `MAX_CONTENT_LENGTH` ... アップロード可能なCSVの最大バイト数（例: 10485760）
+- `SESSION_LIFETIME_DAYS` ... ログイン状態を保持する日数（例: 7）
 - `AUDIT_LOG_PATH` ... 監査ログファイルの出力パス（省略時は `logs/audit.log`）
   - 行は `timestamp\taction\tuser_id\tuser_name\tIP\tdevice\tOS` の形式
     - `device` は `pc` / `smartphone` / `tablet`

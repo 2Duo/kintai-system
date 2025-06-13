@@ -24,6 +24,9 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your_secret_key_here')  # 本番は環境変数
 app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_CONTENT_LENGTH', 10 * 1024 * 1024))
+app.permanent_session_lifetime = timedelta(
+    days=int(os.environ.get('SESSION_LIFETIME_DAYS', 7))
+)
 
 if not app.secret_key or app.secret_key == 'your_secret_key_here':
     raise RuntimeError("SECRET_KEYを環境変数で必ず設定してください")
@@ -441,6 +444,7 @@ def login():
         session['user_name'] = user['name']
         session['is_admin'] = bool(user['is_admin'])
         session['is_superadmin'] = bool(user['is_superadmin'])
+        session.permanent = True
         log_audit_event('login', user['id'], user['name'])
         return redirect(url_for('index'))
 
