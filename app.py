@@ -36,6 +36,13 @@ AUDIT_LOG_PATH = os.environ.get(
 )
 os.makedirs(os.path.dirname(AUDIT_LOG_PATH), exist_ok=True)
 
+def clear_audit_log():
+    """サービス起動時に監査ログを空にする"""
+    with open(AUDIT_LOG_PATH, 'w', encoding='utf-8'):
+        pass
+
+clear_audit_log()
+
 # === 1. 共通DBコネクション関数 ===
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -54,11 +61,15 @@ def is_valid_time(time_str):
         return False
 
 # === 2b. 監査ログ ===
-def log_audit_event(action, user_id=None):
+def log_audit_event(action, user_id=None, user_name=None):
+    """監査ログにイベントを記録する"""
     ip = request.remote_addr or '-'
     ua = request.headers.get('User-Agent', '-')
-    ts = datetime.utcnow().isoformat()
-    line = f"{ts}\t{action}\t{user_id if user_id else '-'}\t{ip}\t{ua}\n"
+    ts = datetime.now().astimezone().isoformat()
+    line = (
+        f"{ts}\t{action}\t{user_id if user_id else '-'}\t"
+        f"{user_name if user_name else '-'}\t{ip}\t{ua}\n"
+    )
     with open(AUDIT_LOG_PATH, 'a', encoding='utf-8') as f:
         f.write(line)
 
@@ -310,7 +321,7 @@ def login():
         session['user_name'] = user['name']
         session['is_admin'] = bool(user['is_admin'])
         session['is_superadmin'] = bool(user['is_superadmin'])
-        log_audit_event('login', user['id'])
+        log_audit_event('login', user['id'], user['name'])
         return redirect(url_for('index'))
 
     return render_template('login.html', errors=errors)
@@ -318,9 +329,10 @@ def login():
 @app.route('/logout')
 def logout():
     user_id = session.get('user_id')
+    user_name = session.get('user_name')
     session.clear()
     if user_id:
-        log_audit_event('logout', user_id)
+        log_audit_event('logout', user_id, user_name)
     return redirect(url_for('login'))
 
 @app.route('/punch', methods=['POST'])
@@ -353,7 +365,7 @@ def punch():
               (user_id, timestamp, punch_type, description))
     conn.commit()
     conn.close()
-    log_audit_event(f'punch:{punch_type}', user_id)
+    log_audit_event(f'punch:{punch_type}', user_id, session.get('user_name'))
     flash("打刻しました。", "success")
     referer = request.form.get('referer', url_for('index'))
     return redirect(referer)
@@ -378,7 +390,9 @@ def resolve_punch():
                   (user_id, timestamp, punch_type, description))
         conn.commit()
     conn.close()
-    log_audit_event(f'resolve:{action}:{punch_type}', user_id)
+    log_audit_event(
+        f'resolve:{action}:{punch_type}', user_id, session.get('user_name')
+    )
     flash("打刻しました。", "success")
     referer = request.form.get('referer', url_for('index'))
     return redirect(referer)
