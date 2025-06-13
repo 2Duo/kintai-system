@@ -160,12 +160,15 @@ GitHub等にアップロードする際は、`.env`は**絶対に公開しない
    User=www-data  # 実行ユーザー
    WorkingDirectory=/path/to/kintai-system
    EnvironmentFile=/path/to/kintai-system/.env
-   ExecStart=/path/to/kintai-system/venv/bin/gunicorn -w 4 -b 0.0.0.0:8000 app:app
+   ExecStart=/path/to/kintai-system/venv/bin/gunicorn \
+       -w 4 --threads 4 -b 0.0.0.0:8000 app:app
    Restart=always
 
    [Install]
    WantedBy=multi-user.target
    ```
+   `--threads` を指定してスレッドワーカーを有効にすることで、チャットの
+   Server-Sent Events 接続が複数あってもワーカーが塞がらず安定します。
 4. サービスを有効化・起動します。
    ```bash
    sudo systemctl daemon-reload
