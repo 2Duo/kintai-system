@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, send_file, flash
+from flask import Flask, render_template, request, redirect, url_for, session, send_file, flash, Response
 from werkzeug.exceptions import RequestEntityTooLarge
 import sqlite3
 from datetime import datetime, timedelta
@@ -16,6 +16,8 @@ from dotenv import load_dotenv
 import smtplib
 from email.message import EmailMessage
 import subprocess
+import json
+from queue import Queue
 
 load_dotenv()
 
@@ -128,6 +130,30 @@ def inject_unread_count():
     count = c.fetchone()[0]
     conn.close()
     return {'unread_count': count}
+
+# === SSE管理 ===
+user_streams = {}
+
+def get_unread_count(user_id):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        "SELECT COUNT(*) FROM messages WHERE recipient_id = ? AND is_read = 0",
+        (user_id,),
+    )
+    count = c.fetchone()[0]
+    conn.close()
+    return count
+
+def push_event(user_id, data):
+    q_list = user_streams.get(user_id)
+    if not q_list:
+        return
+    for q in q_list:
+        q.put(data)
+
+def push_unread(user_id):
+    push_event(user_id, {"type": "unread", "count": get_unread_count(user_id)})
 
 # === 4. ログイン/権限チェックデコレーター ===
 def login_required(f):
@@ -775,6 +801,7 @@ def chat(partner_id):
             return redirect(url_for('chat', partner_id=partner_id))
         message = request.form.get('message', '').strip()
         if message:
+            ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             c.execute(
                 "INSERT INTO messages (sender_id, recipient_id, message, timestamp)"
                 " VALUES (?, ?, ?, ?)",
@@ -782,10 +809,18 @@ def chat(partner_id):
                     current_id,
                     partner_id,
                     message,
-                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    ts,
                 ),
             )
             conn.commit()
+            push_event(partner_id, {
+                "type": "message",
+                "message": message,
+                "sender_id": current_id,
+                "sender_name": session.get('user_name', ''),
+                "timestamp": ts
+            })
+            push_unread(partner_id)
     c.execute(
         """
         SELECT id, sender_id, recipient_id, message, timestamp, is_read, read_timestamp
@@ -855,12 +890,20 @@ def mark_chat_read(partner_id):
     conn = get_db()
     c = conn.cursor()
     c.execute(
+        "SELECT id FROM messages WHERE sender_id = ? AND recipient_id = ? AND is_read = 0",
+        (partner_id, session['user_id']),
+    )
+    ids = [r['id'] for r in c.fetchall()]
+    c.execute(
         "UPDATE messages SET is_read = 1, read_timestamp = ? WHERE sender_id = ? AND recipient_id = ? AND is_read = 0",
         (now, partner_id, session['user_id']),
     )
     updated = c.rowcount
     conn.commit()
     conn.close()
+    if updated:
+        push_event(partner_id, {"type": "read", "ids": ids})
+        push_unread(session['user_id'])
     return {'updated': updated, 'ts': now}
 
 
@@ -876,6 +919,25 @@ def unread_count_api():
     count = c.fetchone()[0]
     conn.close()
     return {'count': count}
+
+
+@app.route('/events')
+@login_required
+def sse_events():
+    user_id = session['user_id']
+
+    def stream():
+        q = Queue()
+        user_streams.setdefault(user_id, []).append(q)
+        push_unread(user_id)
+        try:
+            while True:
+                data = q.get()
+                yield f"data: {json.dumps(data)}\n\n"
+        finally:
+            user_streams[user_id].remove(q)
+
+    return Response(stream(), mimetype='text/event-stream')
 
 
 @app.route('/my/chat')

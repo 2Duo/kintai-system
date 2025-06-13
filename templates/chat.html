@@ -27,7 +27,6 @@
 <script>
 const box = document.getElementById('chat-box');
 const currentId = {{ current_id }};
-let last = '{{ messages[-1]["timestamp"] if messages else "" }}';
 let lastRead = '{{ last_read }}';
 const csrfToken = document.querySelector('input[name="_csrf_token"]').value;
 
@@ -41,7 +40,6 @@ async function markRead(){
     const data = await resp.json();
     if(data.updated){
       lastRead = data.ts;
-      updateUnread();
     }
   }
 }
@@ -66,40 +64,27 @@ function appendMessage(m){
   box.appendChild(wrap);
   box.scrollTop = box.scrollHeight;
 }
-async function poll(){
-  const url = '{{ url_for('poll_chat', partner_id=partner_id) }}?after=' + encodeURIComponent(last) + '&after_read=' + encodeURIComponent(lastRead);
-  const resp = await fetch(url);
-  if(resp.ok){
-    const data = await resp.json();
-    data.messages.forEach(m => {
-      appendMessage(m);
-      if(Notification.permission === 'granted' && m.sender_id != {{ current_id }}){
-        new Notification({{ partner_name|tojson }}, {body: m.message});
-      }
-      last = m.timestamp;
-    });
-    data.reads.forEach(id => {
+if('Notification' in window && Notification.permission === 'default'){
+  Notification.requestPermission();
+}
+const evt = new EventSource('{{ url_for('sse_events') }}');
+evt.onmessage = e => {
+  const data = JSON.parse(e.data);
+  if(data.type === 'message' && data.sender_id == {{ partner_id }}){
+    appendMessage({sender_id: data.sender_id, message: data.message, timestamp: data.timestamp, is_read: false});
+    markRead();
+  }
+  if(data.type === 'read' && data.ids){
+    data.ids.forEach(id => {
       const span = document.querySelector('span[data-id="' + id + '"]');
       if(span && span.dataset.read == '0'){
         span.textContent = '既読';
         span.dataset.read = '1';
       }
     });
-    if(data.reads.length){
-      lastRead = new Date().toISOString().slice(0,19).replace('T',' ');
-    }
-    if(data.messages.length){
-      await markRead();
-    }
-    if(data.messages.length || data.reads.length){
-      updateUnread();
-    }
+    lastRead = new Date().toISOString().slice(0,19).replace('T',' ');
   }
-}
-if('Notification' in window && Notification.permission === 'default'){
-  Notification.requestPermission();
-}
-setInterval(poll, 5000);
+};
 box.scrollTop = box.scrollHeight;
 markRead();
 </script>

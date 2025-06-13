@@ -93,19 +93,13 @@ if ('serviceWorker' in navigator) {
 <!-- ▲▲▲ Service Worker登録スクリプト ▲▲▲ -->
 
 <script>
-async function updateUnread(){
-  const resp = await fetch('{{ url_for('unread_count_api') }}');
-  if(resp.ok){
-    const data = await resp.json();
-    document.querySelectorAll('#nav-unread, #toggle-unread').forEach(b => {
-      if(!b) return;
-      b.textContent = data.count;
-      b.style.display = data.count ? 'inline-block' : 'none';
-    });
-  }
+function handleUnread(count){
+  document.querySelectorAll('#nav-unread, #toggle-unread').forEach(b => {
+    if(!b) return;
+    b.textContent = count;
+    b.style.display = count ? 'inline-block' : 'none';
+  });
 }
-updateUnread();
-setInterval(updateUnread, 5000);
 document.addEventListener('DOMContentLoaded', () => {
   const menu = document.getElementById('navbarMenu');
   const toggleBadge = document.getElementById('toggle-unread');
@@ -114,6 +108,20 @@ document.addEventListener('DOMContentLoaded', () => {
     menu.addEventListener('hidden.bs.collapse', () => {
       if(parseInt(toggleBadge.textContent)) toggleBadge.style.display = 'inline-block';
     });
+  }
+  const evt = new EventSource('{{ url_for('sse_events') }}');
+  evt.onmessage = e => {
+    const data = JSON.parse(e.data);
+    if(data.type === 'unread'){
+      handleUnread(data.count);
+    } else if(data.type === 'message'){
+      if('Notification' in window && Notification.permission === 'granted'){
+        new Notification(data.sender_name || '新着メッセージ', {body: data.message});
+      }
+    }
+  };
+  if('Notification' in window && Notification.permission === 'default'){
+    Notification.requestPermission();
   }
 });
 </script>
