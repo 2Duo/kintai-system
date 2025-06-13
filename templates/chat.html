@@ -29,6 +29,22 @@ const box = document.getElementById('chat-box');
 const currentId = {{ current_id }};
 let last = '{{ messages[-1]["timestamp"] if messages else "" }}';
 let lastRead = '{{ last_read }}';
+const csrfToken = document.querySelector('input[name="_csrf_token"]').value;
+
+async function markRead(){
+  const resp = await fetch('{{ url_for('mark_chat_read', partner_id=partner_id) }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: '_csrf_token=' + encodeURIComponent(csrfToken)
+  });
+  if(resp.ok){
+    const data = await resp.json();
+    if(data.updated){
+      lastRead = data.ts;
+      updateUnread();
+    }
+  }
+}
 function appendMessage(m){
   const wrap = document.createElement('div');
   wrap.className = 'chat-message ' + (m.sender_id == currentId ? 'self' : 'other');
@@ -72,6 +88,9 @@ async function poll(){
     if(data.reads.length){
       lastRead = new Date().toISOString().slice(0,19).replace('T',' ');
     }
+    if(data.messages.length){
+      await markRead();
+    }
     if(data.messages.length || data.reads.length){
       updateUnread();
     }
@@ -82,5 +101,6 @@ if('Notification' in window && Notification.permission === 'default'){
 }
 setInterval(poll, 5000);
 box.scrollTop = box.scrollHeight;
+markRead();
 </script>
 {% endblock %}

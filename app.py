@@ -787,11 +787,6 @@ def chat(partner_id):
             )
             conn.commit()
     c.execute(
-        "UPDATE messages SET is_read = 1, read_timestamp = ? WHERE sender_id = ? AND recipient_id = ? AND is_read = 0",
-        (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), partner_id, current_id),
-    )
-    conn.commit()
-    c.execute(
         """
         SELECT id, sender_id, recipient_id, message, timestamp, is_read, read_timestamp
         FROM messages
@@ -840,12 +835,6 @@ def poll_chat(partner_id):
         (current_id, partner_id, partner_id, current_id, after),
     )
     rows = [dict(r) for r in c.fetchall()]
-    if rows:
-        c.execute(
-            "UPDATE messages SET is_read = 1, read_timestamp = ? WHERE sender_id = ? AND recipient_id = ? AND is_read = 0",
-            (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), partner_id, current_id),
-        )
-        conn.commit()
     c.execute(
         "SELECT id FROM messages WHERE sender_id = ? AND recipient_id = ? AND is_read = 1 AND read_timestamp > ?",
         (current_id, partner_id, after_read),
@@ -853,6 +842,26 @@ def poll_chat(partner_id):
     read_ids = [r['id'] for r in c.fetchall()]
     conn.close()
     return {'messages': rows, 'reads': read_ids}
+
+
+@app.route('/chat/mark_read/<int:partner_id>', methods=['POST'])
+@login_required
+def mark_chat_read(partner_id):
+    if not can_chat(session['user_id'], partner_id):
+        return {'status': 'error'}, 403
+    if not check_csrf():
+        return {'status': 'error'}, 400
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        "UPDATE messages SET is_read = 1, read_timestamp = ? WHERE sender_id = ? AND recipient_id = ? AND is_read = 0",
+        (now, partner_id, session['user_id']),
+    )
+    updated = c.rowcount
+    conn.commit()
+    conn.close()
+    return {'updated': updated, 'ts': now}
 
 
 @app.route('/chat/unread_count')
