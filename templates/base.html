@@ -33,9 +33,10 @@
   <div class="container-fluid">
     <a class="navbar-brand" href="{{ url_for('index') }}">勤怠管理</a>
     <!-- ▼ ハンバーガーメニュー開閉ボタン -->
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMenu"
+    <button class="navbar-toggler position-relative" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMenu"
             aria-controls="navbarMenu" aria-expanded="false" aria-label="メニュー切り替え">
       <span class="navbar-toggler-icon"></span>
+      <span id="toggle-unread" class="badge bg-danger" style="display:none"></span>
     </button>
     <!-- ▼ 折りたたみ対象メニュー -->
     <div class="collapse navbar-collapse" id="navbarMenu">
@@ -96,15 +97,25 @@ async function updateUnread(){
   const resp = await fetch('{{ url_for('unread_count_api') }}');
   if(resp.ok){
     const data = await resp.json();
-    const badge = document.querySelector('#nav-unread');
-    if(badge){
-      badge.textContent = data.count;
-      badge.style.display = data.count ? 'inline-block' : 'none';
-    }
+    document.querySelectorAll('#nav-unread, #toggle-unread').forEach(b => {
+      if(!b) return;
+      b.textContent = data.count;
+      b.style.display = data.count ? 'inline-block' : 'none';
+    });
   }
 }
 updateUnread();
-setInterval(updateUnread, 15000);
+setInterval(updateUnread, 5000);
+document.addEventListener('DOMContentLoaded', () => {
+  const menu = document.getElementById('navbarMenu');
+  const toggleBadge = document.getElementById('toggle-unread');
+  if(menu && toggleBadge){
+    menu.addEventListener('show.bs.collapse', () => { toggleBadge.style.display = 'none'; });
+    menu.addEventListener('hidden.bs.collapse', () => {
+      if(parseInt(toggleBadge.textContent)) toggleBadge.style.display = 'inline-block';
+    });
+  }
+});
 </script>
 
 {% if request.args.get('embedded') %}

@@ -87,3 +87,14 @@ textarea {
 .nav-link .badge {
     vertical-align: top;
 }
+
+/* ハンバーガーボタンの未読バッジ */
+.navbar-toggler {
+    position: relative;
+}
+.navbar-toggler .badge {
+    position: absolute;
+    top: 0;
+    right: 0;
+    transform: translate(50%, -50%);
+}
