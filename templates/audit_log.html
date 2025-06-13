@@ -1,0 +1,6 @@
+{% extends 'base.html' %}
+{% block title %}監査ログ{% endblock %}
+{% block content %}
+<h1 class="mb-3">監査ログ</h1>
+<pre class="border p-3" style="max-height:600px; overflow:auto; font-size:0.9em;">{% for line in log_lines %}{{ line }}{% endfor %}</pre>
+{% endblock %}

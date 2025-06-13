@@ -29,6 +29,13 @@ DB_PATH = os.path.join(os.path.dirname(__file__), 'database', 'kintai.db')
 EXPORT_DIR = os.path.join(os.path.dirname(__file__), 'exports')
 os.makedirs(EXPORT_DIR, exist_ok=True)
 
+# 監査ログ設定
+AUDIT_LOG_PATH = os.environ.get(
+    'AUDIT_LOG_PATH',
+    os.path.join(os.path.dirname(__file__), 'logs', 'audit.log')
+)
+os.makedirs(os.path.dirname(AUDIT_LOG_PATH), exist_ok=True)
+
 # === 1. 共通DBコネクション関数 ===
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -45,6 +52,15 @@ def is_valid_time(time_str):
         return True
     except ValueError:
         return False
+
+# === 2b. 監査ログ ===
+def log_audit_event(action, user_id=None):
+    ip = request.remote_addr or '-'
+    ua = request.headers.get('User-Agent', '-')
+    ts = datetime.utcnow().isoformat()
+    line = f"{ts}\t{action}\t{user_id if user_id else '-'}\t{ip}\t{ua}\n"
+    with open(AUDIT_LOG_PATH, 'a', encoding='utf-8') as f:
+        f.write(line)
 
 # === 3. CSRFトークン管理 ===
 def generate_csrf_token():
@@ -294,13 +310,17 @@ def login():
         session['user_name'] = user['name']
         session['is_admin'] = bool(user['is_admin'])
         session['is_superadmin'] = bool(user['is_superadmin'])
+        log_audit_event('login', user['id'])
         return redirect(url_for('index'))
 
     return render_template('login.html', errors=errors)
 
 @app.route('/logout')
 def logout():
+    user_id = session.get('user_id')
     session.clear()
+    if user_id:
+        log_audit_event('logout', user_id)
     return redirect(url_for('login'))
 
 @app.route('/punch', methods=['POST'])
@@ -333,6 +353,7 @@ def punch():
               (user_id, timestamp, punch_type, description))
     conn.commit()
     conn.close()
+    log_audit_event(f'punch:{punch_type}', user_id)
     flash("打刻しました。", "success")
     referer = request.form.get('referer', url_for('index'))
     return redirect(referer)
@@ -357,6 +378,7 @@ def resolve_punch():
                   (user_id, timestamp, punch_type, description))
         conn.commit()
     conn.close()
+    log_audit_event(f'resolve:{action}:{punch_type}', user_id)
     flash("打刻しました。", "success")
     referer = request.form.get('referer', url_for('index'))
     return redirect(referer)
@@ -855,6 +877,18 @@ def mail_settings():
         flash('メール設定を更新しました。', 'success')
         return redirect(url_for('mail_settings'))
     return render_template('mail_settings.html', settings=settings, errors=errors)
+
+
+@app.route('/admin/audit_log')
+@superadmin_required
+def view_audit_log():
+    if not os.path.exists(AUDIT_LOG_PATH):
+        lines = []
+    else:
+        with open(AUDIT_LOG_PATH, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+    lines = list(reversed(lines[-500:]))
+    return render_template('audit_log.html', log_lines=lines)
 
 @app.route('/setup', methods=['GET', 'POST'])
 def setup():
