@@ -6,6 +6,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  {% if request.args.get('embedded') %}
+  <style>
+    body { background-color: #fff; }
+    .container {
+      box-shadow: none;
+      margin: 0;
+      padding: 0;
+    }
+  </style>
+  {% endif %}
 
   <!-- ▼▼▼ PWA用タグ追加（ここから） ▼▼▼ -->
   <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
@@ -18,6 +28,7 @@
 </head>
 <body>
 <!-- すべてのPOSTフォームにはCSRFトークンをhiddenで埋め込むこと -->
+{% if not request.args.get('embedded') %}
 <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4">
   <div class="container-fluid">
     <a class="navbar-brand" href="{{ url_for('index') }}">勤怠管理</a>
@@ -32,14 +43,7 @@
         <li class="nav-item"><a class="nav-link" href="{{ url_for('index') }}">打刻</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('view_my_logs') }}">勤怠表示・CSV</a></li>
         {% if session.get('is_admin') %}
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('export_combined') }}">CSV管理</a></li>
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('create_user') }}">ユーザー作成</a></li>
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('list_users') }}">ユーザー管理</a></li>
-        {% if session.get('is_superadmin') %}
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('mail_settings') }}">メール設定</a></li>
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('view_audit_log') }}">監査ログ</a></li>
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('update_system') }}">アップデート</a></li>
-        {% endif %}
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_dashboard') }}">管理ページ</a></li>
         {% endif %}
         {% if session.get('user_id') %}
         <li class="nav-item"><a class="nav-link" href="{{ url_for('my_page') }}">マイページ</a></li>
@@ -52,6 +56,7 @@
     </div>
   </div>
 </nav>
+{% endif %}
 
 <div class="container">
 
@@ -80,6 +85,27 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 <!-- ▲▲▲ Service Worker登録スクリプト ▲▲▲ -->
+
+{% if request.args.get('embedded') %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('a').forEach(a => {
+    const url = new URL(a.getAttribute('href'), window.location.origin);
+    if (!url.searchParams.has('embedded')) {
+      url.searchParams.set('embedded', '1');
+      a.href = url.pathname + url.search + url.hash;
+    }
+  });
+  document.querySelectorAll('form').forEach(f => {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'embedded';
+    input.value = '1';
+    f.appendChild(input);
+  });
+});
+</script>
+{% endif %}
 
 </body>
 </html>

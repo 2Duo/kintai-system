@@ -139,6 +139,13 @@ def superadmin_required(f):
         return f(*args, **kwargs)
     return decorated
 
+# embedded=1 を維持したままリダイレクトするユーティリティ
+def redirect_embedded(endpoint, **values):
+    embedded = request.args.get('embedded') or request.form.get('embedded')
+    if embedded:
+        values['embedded'] = embedded
+    return redirect(url_for(endpoint, **values))
+
 # === 5. ファイル検証 ===
 ALLOWED_EXTENSIONS = {'csv'}
 def allowed_file(filename):
@@ -483,7 +490,19 @@ def download_export_file(filename):
 @app.route('/my')
 @login_required
 def my_page():
-    return render_template('my_page.html')
+    return render_template('my_dashboard.html')
+
+
+@app.route('/my/profile')
+@login_required
+def my_profile():
+    return render_template('my_profile.html')
+
+
+@app.route('/admin')
+@admin_required
+def admin_dashboard():
+    return render_template('admin_dashboard.html')
 
 @app.route('/my/password', methods=['GET', 'POST'])
 @login_required
@@ -492,7 +511,7 @@ def my_password():
     errors = {}
     if request.method == 'POST':
         if not check_csrf():
-            return redirect(url_for('my_password'))
+            return redirect_embedded('my_password')
         current = request.form.get('current_password', '')
         new = request.form.get('new_password', '')
         confirm = request.form.get('confirm_password', '')
@@ -522,7 +541,7 @@ def my_password():
                 conn.commit()
                 conn.close()
                 flash("パスワードを更新しました。", "success")
-                return redirect(url_for('index'))
+                return redirect_embedded('my_password')
 
         return render_template('my_password.html', errors=errors)
 
@@ -814,14 +833,14 @@ def create_user():
             return render_template('create_user.html', errors=errors)
         conn.close()
         flash("ユーザーを作成しました。", "success")
-        return redirect(url_for('list_users'))
+        return redirect_embedded('list_users')
     return render_template('create_user.html', errors=errors)
 
 @app.route('/admin/users/manage', methods=['POST'])
 @admin_required
 def update_managed_users():
     if not check_csrf():
-        return redirect(url_for('list_users'))
+        return redirect_embedded('list_users')
     admin_id = session['user_id']
     selected_ids = request.form.getlist('managed_users')
     selected_ids = list(map(int, selected_ids))
@@ -833,7 +852,7 @@ def update_managed_users():
     conn.commit()
     conn.close()
     flash("管理対象を更新しました。", "success")
-    return redirect(url_for('list_users'))
+    return redirect_embedded('list_users')
 
 @app.route('/admin/users/edit/<int:user_id>', methods=['GET', 'POST'])
 @admin_required
@@ -845,12 +864,12 @@ def edit_user(user_id):
     if not user:
         conn.close()
         flash("ユーザーが見つかりません。", "danger")
-        return redirect(url_for('list_users'))
+        return redirect_embedded('list_users')
 
     errors = {}
     if request.method == 'POST':
         if not check_csrf():
-            return redirect(url_for('edit_user', user_id=user_id))
+            return redirect_embedded('edit_user', user_id=user_id)
         name = request.form.get('name', '').strip()
         email = request.form.get('email', '').strip()
         is_admin = 1 if user['is_superadmin'] else int('is_admin' in request.form)
@@ -885,7 +904,7 @@ def edit_user(user_id):
             conn.close()
             return render_template('edit_user.html', user_id=user_id, user=user, errors=errors)
         conn.close()
-        return redirect(url_for('list_users'))
+        return redirect_embedded('list_users')
 
     conn.close()
     return render_template('edit_user.html', user_id=user_id, user=user, errors=errors)
@@ -900,25 +919,25 @@ def delete_user(user_id):
     if not user:
         conn.close()
         flash("ユーザーが見つかりません。", "danger")
-        return redirect(url_for('list_users'))
+        return redirect_embedded('list_users')
 
     if request.method == 'POST':
         if not check_csrf():
             conn.close()
-            return redirect(url_for('list_users'))
+            return redirect_embedded('list_users')
         if user_id == session.get('user_id'):
             flash("自分自身のアカウントは削除できません。", "danger")
             conn.close()
-            return redirect(url_for('list_users'))
+            return redirect_embedded('list_users')
         if user['is_superadmin']:
             flash("スーパー管理者は削除できません。", "danger")
             conn.close()
-            return redirect(url_for('list_users'))
+            return redirect_embedded('list_users')
         c.execute("DELETE FROM users WHERE id = ?", (user_id,))
         conn.commit()
         conn.close()
         flash("ユーザーを削除しました。", "success")
-        return redirect(url_for('list_users'))
+        return redirect_embedded('list_users')
 
     conn.close()
     return render_template('confirm_delete_user.html', user=user)
@@ -931,7 +950,7 @@ def mail_settings():
     settings = get_mail_settings() or {}
     if request.method == 'POST':
         if not check_csrf():
-            return redirect(url_for('mail_settings'))
+            return redirect_embedded('mail_settings')
         server = request.form.get('server', '').strip()
         port = request.form.get('port', '').strip()
         username = request.form.get('username', '').strip()
@@ -948,7 +967,7 @@ def mail_settings():
             return render_template('mail_settings.html', settings=settings, errors=errors)
         save_mail_settings(server, int(port), username, password, use_tls, subject_tmpl, body_tmpl)
         flash('メール設定を更新しました。', 'success')
-        return redirect(url_for('mail_settings'))
+        return redirect_embedded('mail_settings')
     return render_template('mail_settings.html', settings=settings, errors=errors)
 
 
@@ -1001,7 +1020,7 @@ def update_system():
                     break
     if request.method == 'POST':
         if not check_csrf():
-            return redirect(url_for('update_system'))
+            return redirect_embedded('update_system')
         if critical_changes:
             flash('重要なファイルが変更されているため自動アップデートできません。', 'danger')
             return render_template(
