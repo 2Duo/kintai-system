@@ -114,6 +114,21 @@ def check_csrf():
             return False
     return True
 
+
+@app.context_processor
+def inject_unread_count():
+    if 'user_id' not in session:
+        return {'unread_count': 0}
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        "SELECT COUNT(*) FROM messages WHERE recipient_id = ? AND is_read = 0",
+        (session['user_id'],),
+    )
+    count = c.fetchone()[0]
+    conn.close()
+    return {'unread_count': count}
+
 # === 4. ログイン/権限チェックデコレーター ===
 def login_required(f):
     @wraps(f)
@@ -781,6 +796,11 @@ def chat(partner_id):
         (current_id, partner_id, partner_id, current_id),
     )
     messages = c.fetchall()
+    c.execute(
+        "UPDATE messages SET is_read = 1 WHERE sender_id = ? AND recipient_id = ? AND is_read = 0",
+        (partner_id, current_id),
+    )
+    conn.commit()
     conn.close()
     partner_name = fetch_user_name(partner_id)
     return render_template(
@@ -811,8 +831,28 @@ def poll_chat(partner_id):
         (current_id, partner_id, partner_id, current_id, after),
     )
     rows = [dict(r) for r in c.fetchall()]
+    if rows:
+        c.execute(
+            "UPDATE messages SET is_read = 1 WHERE sender_id = ? AND recipient_id = ? AND is_read = 0",
+            (partner_id, current_id),
+        )
+        conn.commit()
     conn.close()
     return {'messages': rows}
+
+
+@app.route('/chat/unread_count')
+@login_required
+def unread_count_api():
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        "SELECT COUNT(*) FROM messages WHERE recipient_id = ? AND is_read = 0",
+        (session['user_id'],),
+    )
+    count = c.fetchone()[0]
+    conn.close()
+    return {'count': count}
 
 
 @app.route('/my/chat')

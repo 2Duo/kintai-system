@@ -41,7 +41,11 @@
     <div class="collapse navbar-collapse" id="navbarMenu">
       <ul class="navbar-nav me-auto">
         <li class="nav-item"><a class="nav-link" href="{{ url_for('index') }}">打刻</a></li>
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('my_chat') }}">チャット</a></li>
+        <li class="nav-item">
+          <a class="nav-link" href="{{ url_for('my_chat') }}">チャット
+            <span id="nav-unread" class="badge bg-danger ms-1" {% if not unread_count %}style="display:none"{% endif %}>{{ unread_count }}</span>
+          </a>
+        </li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('view_my_logs') }}">勤怠表示・CSV</a></li>
         {% if session.get('is_admin') %}
         <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_dashboard') }}">管理ページ</a></li>
@@ -86,6 +90,22 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 <!-- ▲▲▲ Service Worker登録スクリプト ▲▲▲ -->
+
+<script>
+async function updateUnread(){
+  const resp = await fetch('{{ url_for('unread_count_api') }}');
+  if(resp.ok){
+    const data = await resp.json();
+    const badge = document.querySelector('#nav-unread');
+    if(badge){
+      badge.textContent = data.count;
+      badge.style.display = data.count ? 'inline-block' : 'none';
+    }
+  }
+}
+updateUnread();
+setInterval(updateUnread, 15000);
+</script>
 
 {% if request.args.get('embedded') %}
 <script>
