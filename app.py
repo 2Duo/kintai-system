@@ -983,7 +983,9 @@ def sse_events():
         q = Queue()
         user_streams[user_id].add(q)
         push_unread(user_id)
-        # Chromeでは初回にデータ行を送らないと読み込みが終了しないため
+        # Chromeでは最初のメッセージが届くまで読み込みが継続するため、
+        # 2KBのプレースホルダとダミーイベントを送信してバッファリングを防ぐ
+        yield ':' + (' ' * 2048) + '\n'
         yield f"data: {json.dumps({'type': 'ping'})}\n\n"
         try:
             while True:
