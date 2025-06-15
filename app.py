@@ -23,7 +23,10 @@ import smtplib
 from email.message import EmailMessage
 import subprocess
 import json
-from queue import Queue, Empty
+try:
+    from gevent.queue import Queue, Empty
+except ImportError:  # gevent未使用環境向け
+    from queue import Queue, Empty
 
 load_dotenv()
 
