@@ -13,6 +13,7 @@ import csv
 from io import TextIOWrapper
 from werkzeug.security import generate_password_hash, check_password_hash
 from collections import defaultdict
+from weakref import WeakSet
 import tempfile
 import zipfile
 import re
@@ -144,7 +145,7 @@ def inject_unread_count():
     return {'unread_count': count}
 
 # === SSE管理 ===
-user_streams = {}
+user_streams = defaultdict(WeakSet)
 
 def get_unread_count(user_id):
     conn = get_db()
@@ -158,10 +159,7 @@ def get_unread_count(user_id):
     return count
 
 def push_event(user_id, data):
-    q_list = user_streams.get(user_id)
-    if not q_list:
-        return
-    for q in q_list:
+    for q in list(user_streams[user_id]):
         q.put(data)
 
 def push_unread(user_id):
@@ -972,7 +970,7 @@ def sse_events():
 
     def stream():
         q = Queue()
-        user_streams.setdefault(user_id, []).append(q)
+        user_streams[user_id].add(q)
         push_unread(user_id)
         # send an initial comment so the client finishes loading
         yield ":\n\n"
@@ -984,7 +982,7 @@ def sse_events():
                 except Empty:
                     yield ":\n\n"
         finally:
-            user_streams[user_id].remove(q)
+            user_streams[user_id].discard(q)
 
     return Response(stream(), mimetype='text/event-stream')
 
