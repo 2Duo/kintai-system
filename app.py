@@ -17,7 +17,7 @@ import smtplib
 from email.message import EmailMessage
 import subprocess
 import json
-from queue import Queue
+from queue import Queue, Empty
 
 load_dotenv()
 
@@ -967,8 +967,11 @@ def sse_events():
         push_unread(user_id)
         try:
             while True:
-                data = q.get()
-                yield f"data: {json.dumps(data)}\n\n"
+                try:
+                    data = q.get(timeout=15)
+                    yield f"data: {json.dumps(data)}\n\n"
+                except Empty:
+                    yield ": keep-alive\n\n"
         finally:
             user_streams[user_id].remove(q)
 
