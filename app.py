@@ -1,4 +1,21 @@
-from flask import Flask, render_template, request, redirect, url_for, session, send_file, flash, Response
+try:
+    from gevent import monkey
+    monkey.patch_all()
+except ImportError:
+    pass
+
+from flask import (
+    Flask,
+    render_template,
+    request,
+    redirect,
+    url_for,
+    session,
+    send_file,
+    flash,
+    Response,
+    stream_with_context,
+)
 from werkzeug.exceptions import RequestEntityTooLarge
 import sqlite3
 from datetime import datetime, timedelta
@@ -7,6 +24,7 @@ import csv
 from io import TextIOWrapper
 from werkzeug.security import generate_password_hash, check_password_hash
 from collections import defaultdict
+from weakref import WeakSet
 import tempfile
 import zipfile
 import re
@@ -17,7 +35,10 @@ import smtplib
 from email.message import EmailMessage
 import subprocess
 import json
-from queue import Queue
+try:
+    from gevent.queue import Queue, Empty
+except ImportError:  # gevent未使用環境向け
+    from queue import Queue, Empty
 
 load_dotenv()
 
@@ -135,7 +156,7 @@ def inject_unread_count():
     return {'unread_count': count}
 
 # === SSE管理 ===
-user_streams = {}
+user_streams = defaultdict(WeakSet)
 
 def get_unread_count(user_id):
     conn = get_db()
@@ -149,10 +170,7 @@ def get_unread_count(user_id):
     return count
 
 def push_event(user_id, data):
-    q_list = user_streams.get(user_id)
-    if not q_list:
-        return
-    for q in q_list:
+    for q in list(user_streams[user_id]):
         q.put(data)
 
 def push_unread(user_id):
@@ -963,16 +981,25 @@ def sse_events():
 
     def stream():
         q = Queue()
-        user_streams.setdefault(user_id, []).append(q)
+        user_streams[user_id].add(q)
         push_unread(user_id)
+        # send an initial comment so the client finishes loading
+        yield ":\n\n"
         try:
             while True:
-                data = q.get()
-                yield f"data: {json.dumps(data)}\n\n"
+                try:
+                    data = q.get(timeout=5)
+                    yield f"data: {json.dumps(data)}\n\n"
+                except Empty:
+                    yield ":\n\n"
         finally:
-            user_streams[user_id].remove(q)
+            user_streams[user_id].discard(q)
 
-    return Response(stream(), mimetype='text/event-stream')
+    return Response(
+        stream_with_context(stream()),
+        mimetype='text/event-stream',
+        headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no', 'Connection': 'keep-alive'},
+    )
 
 
 @app.route('/my/chat')
