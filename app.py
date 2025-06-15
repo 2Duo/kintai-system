@@ -971,6 +971,8 @@ def sse_events():
         q = Queue()
         user_streams.setdefault(user_id, []).append(q)
         push_unread(user_id)
+        # send an initial comment so the client finishes loading
+        yield ":\n\n"
         try:
             while True:
                 try:
