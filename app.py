@@ -985,7 +985,8 @@ def sse_events():
         push_unread(user_id)
         # Chromeでは最初のメッセージが届くまで読み込みが継続するため、
         # 2KBのプレースホルダとダミーイベントを送信してバッファリングを防ぐ
-        yield ':' + (' ' * 2048) + '\n'
+        # コメント行のあと空行を置いてイベントを区切る
+        yield ':' + (' ' * 2048) + '\n\n'
         yield f"data: {json.dumps({'type': 'ping'})}\n\n"
         try:
             while True:
