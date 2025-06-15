@@ -983,8 +983,8 @@ def sse_events():
         q = Queue()
         user_streams[user_id].add(q)
         push_unread(user_id)
-        # send an initial comment so the client finishes loading
-        yield ":\n\n"
+        # Chromeでは初回にデータ行を送らないと読み込みが終了しないため
+        yield f"data: {json.dumps({'type': 'ping'})}\n\n"
         try:
             while True:
                 try:
