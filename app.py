@@ -1,3 +1,9 @@
+try:
+    from gevent import monkey
+    monkey.patch_all()
+except ImportError:
+    pass
+
 from flask import Flask, render_template, request, redirect, url_for, session, send_file, flash, Response
 from werkzeug.exceptions import RequestEntityTooLarge
 import sqlite3
