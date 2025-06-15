@@ -968,10 +968,10 @@ def sse_events():
         try:
             while True:
                 try:
-                    data = q.get(timeout=15)
+                    data = q.get(timeout=5)
                     yield f"data: {json.dumps(data)}\n\n"
                 except Empty:
-                    yield ": keep-alive\n\n"
+                    yield ":\n\n"
         finally:
             user_streams[user_id].remove(q)
 
