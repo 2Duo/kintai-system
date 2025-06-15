@@ -72,6 +72,8 @@ cp .env.example .env
 # .env内のSECRET_KEYは必ず独自のランダム値に変更してください
 
 python app.py  # デフォルトでLAN内全デバイスからアクセス可（http://自分のIPアドレス:8000）
+# SSE利用のため内部サーバーはスレッドモードで起動します
+# Chromeの読み込み状態を解除する目的で、初回接続時に2KBのプレースホルダを空行付きで送信しています
 ```
 
 - 自分のPCのIPアドレスを確認し、同じネットワーク上のデバイスから`http://<IPアドレス>:8000`でアクセスできます。
@@ -144,10 +146,11 @@ GitHub等にアップロードする際は、`.env`は**絶対に公開しない
 
 1. 仮想環境を作成し、依存パッケージをインストールします。
    ```bash
-   python3 -m venv venv
-   source venv/bin/activate
-   pip install -r requirements.txt
-   ```
+  python3 -m venv venv
+  source venv/bin/activate
+  pip install -r requirements.txt
+  # gevent もここでインストールされます
+  ```
 2. `.env.example` をコピーして `.env` を作成し、`SECRET_KEY` や `FLASK_DEBUG=0` など本番用の値を設定します。
 3. `gunicorn` でアプリを起動する systemd サービスファイルを作成します。例：`/etc/systemd/system/kintai.service`
    ```ini
@@ -160,12 +163,13 @@ GitHub等にアップロードする際は、`.env`は**絶対に公開しない
    User=www-data  # 実行ユーザー
    WorkingDirectory=/path/to/kintai-system
    EnvironmentFile=/path/to/kintai-system/.env
-   ExecStart=/path/to/kintai-system/venv/bin/gunicorn -w 4 -b 0.0.0.0:8000 app:app
+   ExecStart=/path/to/kintai-system/venv/bin/gunicorn -w 4 -k gevent -b 0.0.0.0:8000 app:app
    Restart=always
 
    [Install]
    WantedBy=multi-user.target
    ```
+ここでは長時間接続が必要なSSEエンドポイントに対応するため、`-k gevent` オプションで非同期ワーカーを利用しています。
 4. サービスを有効化・起動します。
    ```bash
    sudo systemctl daemon-reload
