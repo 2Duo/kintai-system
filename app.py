@@ -1432,4 +1432,5 @@ def setup():
 if __name__ == '__main__':
     debug_env = os.environ.get('FLASK_DEBUG', '0')
     debug_mode = str(debug_env).lower() in ('1', 'true', 'yes')
-    app.run(host='0.0.0.0', port=8000, debug=debug_mode)
+    # 開発サーバーでもSSEを扱えるようスレッドモードを有効化
+    app.run(host='0.0.0.0', port=8000, debug=debug_mode, threaded=True)
