@@ -1,4 +1,10 @@
-from flask import Flask, render_template, request, redirect, url_for, session, send_file, flash, Response
+try:
+    from gevent import monkey
+    monkey.patch_all()
+except ImportError:
+    pass
+
+from flask import Flask, render_template, request, redirect, url_for, session, send_file, flash, Response, stream_with_context
 from werkzeug.exceptions import RequestEntityTooLarge
 import sqlite3
 from datetime import datetime, timedelta
@@ -17,7 +23,10 @@ import smtplib
 from email.message import EmailMessage
 import subprocess
 import json
-from queue import Queue
+try:
+    from gevent.queue import Queue, Empty, Full
+except ImportError:  # gevent未使用環境向け
+    from queue import Queue, Empty, Full
 
 load_dotenv()
 
@@ -153,7 +162,18 @@ def push_event(user_id, data):
     if not q_list:
         return
     for q in q_list:
-        q.put(data)
+        try:
+            q.put_nowait(data)
+        except Full:
+            # drop the oldest event if queue is full
+            try:
+                q.get_nowait()
+            except Empty:
+                pass
+            try:
+                q.put_nowait(data)
+            except Full:
+                pass
 
 def push_unread(user_id):
     push_event(user_id, {"type": "unread", "count": get_unread_count(user_id)})
@@ -961,14 +981,19 @@ def unread_count_api():
 def sse_events():
     user_id = session['user_id']
 
+    @stream_with_context
     def stream():
-        q = Queue()
+        q = Queue(maxsize=10)
         user_streams.setdefault(user_id, []).append(q)
         push_unread(user_id)
+        yield ":\n\n"  # finish browser loading
         try:
             while True:
-                data = q.get()
-                yield f"data: {json.dumps(data)}\n\n"
+                try:
+                    data = q.get(timeout=5)
+                    yield f"data: {json.dumps(data)}\n\n"
+                except Empty:
+                    yield ":\n\n"
         finally:
             user_streams[user_id].remove(q)
 
