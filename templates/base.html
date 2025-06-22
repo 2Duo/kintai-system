@@ -100,16 +100,9 @@ function handleUnread(count){
     b.style.display = count ? 'inline-block' : 'none';
   });
 }
-document.addEventListener('DOMContentLoaded', () => {
-  const menu = document.getElementById('navbarMenu');
-  const toggleBadge = document.getElementById('toggle-unread');
-  if(menu && toggleBadge){
-    menu.addEventListener('show.bs.collapse', () => { toggleBadge.style.display = 'none'; });
-    menu.addEventListener('hidden.bs.collapse', () => {
-      if(parseInt(toggleBadge.textContent)) toggleBadge.style.display = 'inline-block';
-    });
-  }
-  const evt = new EventSource('{{ url_for('sse_events') }}');
+let evt;
+function connectSSE(){
+  evt = new EventSource('{{ url_for('sse_events') }}');
   evt.onmessage = e => {
     const data = JSON.parse(e.data);
     if(data.type === 'unread'){
@@ -123,6 +116,22 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   };
+  evt.onerror = () => {
+    if(evt.readyState === EventSource.CLOSED){
+      setTimeout(connectSSE, 1000);
+    }
+  };
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const menu = document.getElementById('navbarMenu');
+  const toggleBadge = document.getElementById('toggle-unread');
+  if(menu && toggleBadge){
+    menu.addEventListener('show.bs.collapse', () => { toggleBadge.style.display = 'none'; });
+    menu.addEventListener('hidden.bs.collapse', () => {
+      if(parseInt(toggleBadge.textContent)) toggleBadge.style.display = 'inline-block';
+    });
+  }
+  connectSSE();
   if('Notification' in window && Notification.permission === 'default'){
     Notification.requestPermission();
   }
