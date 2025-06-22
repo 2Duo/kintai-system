@@ -250,13 +250,20 @@ def normalize_time_str(time_str):
     except ValueError:
         return time_str
 
-def calculate_overtime(out_time, threshold='18:00'):
-    """Calculate overtime string from out_time and threshold."""
+def calculate_overtime(out_time, threshold='18:00', in_time=None):
+    """Calculate overtime string from out_time, threshold and optional in_time."""
     try:
         out_dt = datetime.strptime(out_time, '%H:%M')
-        th_dt = datetime.strptime(threshold or '18:00', '%H:%M')
-        if out_dt > th_dt:
-            delta = out_dt - th_dt
+        start_dt = datetime.strptime(threshold or '18:00', '%H:%M')
+        if in_time:
+            try:
+                in_dt = datetime.strptime(in_time, '%H:%M')
+                if in_dt > start_dt:
+                    start_dt = in_dt
+            except ValueError:
+                pass
+        if out_dt > start_dt:
+            delta = out_dt - start_dt
             hours, minutes = divmod(delta.seconds // 60, 60)
             return f"{hours:02d}:{minutes:02d}"
     except ValueError:
@@ -397,7 +404,11 @@ def generate_csv(user_id, name, year, month, target_dir, overtime_threshold='18:
             data = daily_data[day]
             dt = datetime.strptime(day, '%Y/%m/%d')
             weekday = '月火水木金土日'[dt.weekday()]
-            overtime = calculate_overtime(data['out'], overtime_threshold) if data['out'] else ''
+            overtime = (
+                calculate_overtime(data['out'], overtime_threshold, data['in'])
+                if data['out']
+                else ''
+            )
             writer.writerow([day, weekday, data['in'], data['out'], data['description'], overtime])
     return filepath
 
@@ -738,7 +749,10 @@ def view_my_logs():
         attendance_by_day[date][typ] = {'time': time, 'description': desc}
     for date, data in attendance_by_day.items():
         if data['out']:
-            data['overtime'] = calculate_overtime(data['out']['time'], overtime_threshold)
+            in_time = data['in']['time'] if data['in'] else None
+            data['overtime'] = calculate_overtime(
+                data['out']['time'], overtime_threshold, in_time
+            )
         else:
             data['overtime'] = ''
     return render_template('my_logs.html', logs=attendance_by_day)
