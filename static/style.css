@@ -124,7 +124,12 @@ textarea {
 
 .chat-list .list-group-item-action::after {
     content: '\203A';
-    margin-left: auto;
+    margin-left: 0.25rem;
     color: #8e8e93;
     font-size: 1.25rem;
+}
+
+/* 個別未読バッジ */
+.chat-badge {
+    margin-left: auto;
 }

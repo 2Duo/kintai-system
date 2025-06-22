@@ -974,6 +974,41 @@ def unread_count_api():
     return {'count': count}
 
 
+@app.route('/chat/unread_counts')
+@login_required
+def unread_counts_api():
+    user_id = session['user_id']
+    conn = get_db()
+    c = conn.cursor()
+    if session.get('is_admin'):
+        c.execute(
+            """
+            SELECT u.id, COUNT(msg.id) AS unread
+            FROM users u
+            INNER JOIN admin_managed_users m ON u.id = m.user_id
+            LEFT JOIN messages msg ON msg.sender_id = u.id AND msg.recipient_id = ? AND msg.is_read = 0
+            WHERE m.admin_id = ?
+            GROUP BY u.id
+            """,
+            (user_id, user_id),
+        )
+    else:
+        c.execute(
+            """
+            SELECT u.id, COUNT(msg.id) AS unread
+            FROM users u
+            INNER JOIN admin_managed_users m ON u.id = m.admin_id
+            LEFT JOIN messages msg ON msg.sender_id = u.id AND msg.recipient_id = ? AND msg.is_read = 0
+            WHERE m.user_id = ?
+            GROUP BY u.id
+            """,
+            (user_id, user_id),
+        )
+    rows = c.fetchall()
+    conn.close()
+    return {row['id']: row['unread'] for row in rows}
+
+
 @app.route('/events')
 @login_required
 def sse_events():
@@ -1015,11 +1050,15 @@ def my_chat():
     c = conn.cursor()
     c.execute(
         """
-        SELECT u.id, u.name FROM users u
+        SELECT u.id, u.name, COUNT(msg.id) AS unread
+        FROM users u
         INNER JOIN admin_managed_users m ON u.id = m.admin_id
-        WHERE m.user_id = ? ORDER BY u.name
+        LEFT JOIN messages msg ON msg.sender_id = u.id AND msg.recipient_id = ? AND msg.is_read = 0
+        WHERE m.user_id = ?
+        GROUP BY u.id, u.name
+        ORDER BY u.name
         """,
-        (user_id,),
+        (user_id, user_id),
     )
     admins = c.fetchall()
     conn.close()
@@ -1036,11 +1075,15 @@ def admin_chat_index():
     c = conn.cursor()
     c.execute(
         """
-        SELECT u.id, u.name FROM users u
+        SELECT u.id, u.name, COUNT(msg.id) AS unread
+        FROM users u
         INNER JOIN admin_managed_users m ON u.id = m.user_id
-        WHERE m.admin_id = ? ORDER BY u.name
+        LEFT JOIN messages msg ON msg.sender_id = u.id AND msg.recipient_id = ? AND msg.is_read = 0
+        WHERE m.admin_id = ?
+        GROUP BY u.id, u.name
+        ORDER BY u.name
         """,
-        (admin_id,),
+        (admin_id, admin_id),
     )
     users = c.fetchall()
     conn.close()

@@ -114,6 +114,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const data = JSON.parse(e.data);
     if(data.type === 'unread'){
       handleUnread(data.count);
+      if(typeof window.updateUnreadCounts === 'function'){
+        window.updateUnreadCounts();
+      }
     } else if(data.type === 'message'){
       if('Notification' in window && Notification.permission === 'granted'){
         new Notification(data.sender_name || '新着メッセージ', {body: data.message});
