@@ -109,24 +109,33 @@ async function fetchHistory(){
 if('Notification' in window && Notification.permission === 'default'){
   Notification.requestPermission();
 }
-const evt = new EventSource('{{ url_for('sse_events') }}');
-evt.onmessage = e => {
-  const data = JSON.parse(e.data);
-  if(data.type === 'message' && data.sender_id == {{ partner_id }}){
-    appendMessage({sender_id: data.sender_id, message: data.message, timestamp: data.timestamp, is_read: false});
-    markRead();
-  }
-  if(data.type === 'read' && data.ids){
-    data.ids.forEach(id => {
-      const span = document.querySelector('span[data-id="' + id + '"]');
-      if(span && span.dataset.read == '0'){
-        span.textContent = '既読';
-        span.dataset.read = '1';
-      }
-    });
-    lastRead = new Date().toISOString().slice(0,19).replace('T',' ');
-  }
-};
+let chatEvt;
+function connectChatSSE(){
+  chatEvt = new EventSource('{{ url_for('sse_events') }}');
+  chatEvt.onmessage = e => {
+    const data = JSON.parse(e.data);
+    if(data.type === 'message' && data.sender_id == {{ partner_id }}){
+      appendMessage({sender_id: data.sender_id, message: data.message, timestamp: data.timestamp, is_read: false});
+      markRead();
+    }
+    if(data.type === 'read' && data.ids){
+      data.ids.forEach(id => {
+        const span = document.querySelector('span[data-id="' + id + '"]');
+        if(span && span.dataset.read == '0'){
+          span.textContent = '既読';
+          span.dataset.read = '1';
+        }
+      });
+      lastRead = new Date().toISOString().slice(0,19).replace('T',' ');
+    }
+  };
+  chatEvt.onerror = () => {
+    if(chatEvt.readyState === EventSource.CLOSED){
+      setTimeout(connectChatSSE, 1000);
+    }
+  };
+}
+connectChatSSE();
 box.addEventListener('scroll', () => {
   if(box.scrollTop === 0){
     fetchHistory();
@@ -134,5 +143,6 @@ box.addEventListener('scroll', () => {
 });
 box.scrollTop = box.scrollHeight;
 markRead();
+document.getElementById('message-input').focus();
 </script>
 {% endblock %}

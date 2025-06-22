@@ -5,16 +5,36 @@
 <ul class="list-group chat-list">
   {% for u in users %}
   {% if as_admin %}
-  <a href="{{ url_for('admin_chat', user_id=u['id']) }}" class="list-group-item list-group-item-action">
+  <a href="{{ url_for('admin_chat', user_id=u['id']) }}" class="list-group-item list-group-item-action" data-user="{{ u['id'] }}">
     <div class="chat-avatar">{{ u['name'][:1] }}</div>
     <span>{{ u['name'] }}</span>
+    <span class="badge bg-danger chat-badge" {% if not u['unread'] %}style="display:none"{% endif %}>{{ u['unread'] }}</span>
   </a>
   {% else %}
-  <a href="{{ url_for('chat', partner_id=u['id']) }}" class="list-group-item list-group-item-action">
+  <a href="{{ url_for('chat', partner_id=u['id']) }}" class="list-group-item list-group-item-action" data-user="{{ u['id'] }}">
     <div class="chat-avatar">{{ u['name'][:1] }}</div>
     <span>{{ u['name'] }}</span>
+    <span class="badge bg-danger chat-badge" {% if not u['unread'] %}style="display:none"{% endif %}>{{ u['unread'] }}</span>
   </a>
   {% endif %}
   {% endfor %}
 </ul>
+<script>
+async function updateUnreadCounts(){
+  const resp = await fetch('{{ url_for('unread_counts_api') }}');
+  if(!resp.ok) return;
+  const data = await resp.json();
+  document.querySelectorAll('.chat-list [data-user]').forEach(el => {
+    const id = el.dataset.user;
+    const badge = el.querySelector('.chat-badge');
+    const count = data[id] || 0;
+    if(badge){
+      badge.textContent = count;
+      badge.style.display = count ? 'inline-block' : 'none';
+    }
+  });
+}
+document.addEventListener('DOMContentLoaded', updateUnreadCounts);
+window.updateUnreadCounts = updateUnreadCounts;
+</script>
 {% endblock %}

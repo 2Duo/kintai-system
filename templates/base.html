@@ -100,6 +100,28 @@ function handleUnread(count){
     b.style.display = count ? 'inline-block' : 'none';
   });
 }
+let evt;
+function connectSSE(){
+  evt = new EventSource('{{ url_for('sse_events') }}');
+  evt.onmessage = e => {
+    const data = JSON.parse(e.data);
+    if(data.type === 'unread'){
+      handleUnread(data.count);
+      if(typeof window.updateUnreadCounts === 'function'){
+        window.updateUnreadCounts();
+      }
+    } else if(data.type === 'message'){
+      if('Notification' in window && Notification.permission === 'granted'){
+        new Notification(data.sender_name || '新着メッセージ', {body: data.message});
+      }
+    }
+  };
+  evt.onerror = () => {
+    if(evt.readyState === EventSource.CLOSED){
+      setTimeout(connectSSE, 1000);
+    }
+  };
+}
 document.addEventListener('DOMContentLoaded', () => {
   const menu = document.getElementById('navbarMenu');
   const toggleBadge = document.getElementById('toggle-unread');
@@ -109,17 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if(parseInt(toggleBadge.textContent)) toggleBadge.style.display = 'inline-block';
     });
   }
-  const evt = new EventSource('{{ url_for('sse_events') }}');
-  evt.onmessage = e => {
-    const data = JSON.parse(e.data);
-    if(data.type === 'unread'){
-      handleUnread(data.count);
-    } else if(data.type === 'message'){
-      if('Notification' in window && Notification.permission === 'granted'){
-        new Notification(data.sender_name || '新着メッセージ', {body: data.message});
-      }
-    }
-  };
+  connectSSE();
   if('Notification' in window && Notification.permission === 'default'){
     Notification.requestPermission();
   }
