@@ -843,6 +843,8 @@ def chat(partner_id):
                 "timestamp": ts
             })
             push_unread(partner_id)
+        conn.close()
+        return redirect(url_for('chat', partner_id=partner_id))
     limit = 20
     c.execute(
         """
