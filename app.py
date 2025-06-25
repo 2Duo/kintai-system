@@ -27,7 +27,6 @@ from collections import defaultdict
 from weakref import WeakSet
 import tempfile
 import zipfile
-import re
 import secrets
 from functools import wraps
 from dotenv import load_dotenv
@@ -35,6 +34,10 @@ import smtplib
 from email.message import EmailMessage
 import subprocess
 import json
+from utils import (
+    is_valid_email, is_valid_time, get_client_info,
+    safe_fromisoformat, normalize_time_str, calculate_overtime
+)
 try:
     from gevent.queue import Queue, Empty
 except ImportError:  # gevent未使用環境向け
@@ -76,41 +79,6 @@ def get_db():
     conn.row_factory = sqlite3.Row
     return conn
 
-# === 2. バリデーション関数 ===
-def is_valid_email(email):
-    return bool(re.match(r'^[^@]+@[^@]+\.[^@]+$', email))
-
-def is_valid_time(time_str):
-    try:
-        datetime.strptime(time_str, '%H:%M')
-        return True
-    except ValueError:
-        return False
-
-# === 2b. 監査ログ ===
-def get_client_info(ua):
-    """User-Agent から端末種別とOS名を推測する"""
-    ua_lower = (ua or '').lower()
-    if 'android' in ua_lower:
-        os_name = 'Android'
-    elif 'iphone' in ua_lower or 'ipad' in ua_lower or 'ios' in ua_lower:
-        os_name = 'iOS'
-    elif 'windows' in ua_lower:
-        os_name = 'Windows'
-    elif 'mac os x' in ua_lower or 'macintosh' in ua_lower:
-        os_name = 'macOS'
-    elif 'linux' in ua_lower:
-        os_name = 'Linux'
-    else:
-        os_name = '-'
-
-    if 'ipad' in ua_lower or 'tablet' in ua_lower or ('android' in ua_lower and 'mobile' not in ua_lower):
-        device = 'tablet'
-    elif 'iphone' in ua_lower or ('android' in ua_lower and 'mobile' in ua_lower):
-        device = 'smartphone'
-    else:
-        device = 'pc'
-    return device, os_name
 
 def log_audit_event(action, user_id=None, user_name=None):
     """監査ログにイベントを記録する"""
@@ -1179,12 +1147,10 @@ def list_users():
     c.execute("SELECT user_id FROM admin_managed_users WHERE admin_id = ?", (admin_id,))
     managed_ids = {row['user_id'] for row in c.fetchall()}
     conn.close()
-    users = []
-    for user in all_users:
-        users.append({
-            'id_name': user,
-            'is_managed': user['id'] in managed_ids
-        })
+    users = [
+        {'id_name': u, 'is_managed': u['id'] in managed_ids}
+        for u in all_users
+    ]
     return render_template('admin_users.html', users=users)
 
 @app.route('/admin/users/create', methods=['GET', 'POST'])
