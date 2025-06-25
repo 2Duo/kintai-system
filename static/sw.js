@@ -13,8 +13,12 @@ self.addEventListener('install', event => {
 
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
-  if (event.request.headers.get('accept') === 'text/event-stream' || url.pathname === '/events') {
+  if (
+    event.request.headers.get('accept') === 'text/event-stream' ||
+    url.pathname === '/events'
+  ) {
     // SSEはキャッシュせずに直接取得
+    event.respondWith(fetch(event.request));
     return;
   }
   event.respondWith(
