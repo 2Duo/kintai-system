@@ -73,6 +73,7 @@ kintai-system/
 ---
 
 ## 本番運用例 (gunicorn + systemd)
+仮想環境を用意し依存パッケージをインストールしたうえで、以下のようなサービスファイルを作成します。
 ```ini
 [Unit]
 Description=Kintai System
@@ -89,7 +90,13 @@ Restart=always
 [Install]
 WantedBy=multi-user.target
 ```
-`gevent` ワーカーを利用し、SSE エンドポイントに対応しています。
+`gevent` ワーカーを利用し、SSE エンドポイントに対応しています。サービス作成後は
+```bash
+sudo systemctl daemon-reload
+sudo systemctl start kintai.service
+sudo systemctl enable kintai.service
+```
+で起動と自動開始を設定できます。
 
 ---
 
