@@ -6,6 +6,7 @@ except ImportError:
 
 from flask import (
     Flask,
+    g,
     render_template,
     request,
     redirect,
@@ -34,6 +35,7 @@ import smtplib
 from email.message import EmailMessage
 import subprocess
 import json
+import time
 from utils import (
     is_valid_email, is_valid_time, get_client_info,
     safe_fromisoformat, normalize_time_str, calculate_overtime
@@ -43,9 +45,46 @@ try:
 except ImportError:  # gevent未使用環境向け
     from queue import Queue, Empty
 
+import logging
+from logging.handlers import RotatingFileHandler
+
 load_dotenv()
 
 app = Flask(__name__)
+
+# === ロギング設定 ===
+log_dir = os.path.join(os.path.dirname(__file__), 'logs')
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, 'app.log')
+
+# ログフォーマット
+formatter = logging.Formatter(
+    '[%(asctime)s] %(levelname)s in %(module)s: %(message)s'
+)
+
+# ハンドラ設定 (5MBでローテーション、バックアップ3世代)
+handler = RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=3, encoding='utf-8')
+handler.setFormatter(formatter)
+
+# ロガー設定
+logger = logging.getLogger(__name__)
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
+@app.before_request
+def log_request_start():
+    g.start_time = time.time()
+    logger.info(f"Request start: {request.method} {request.path} from {request.remote_addr}")
+
+@app.after_request
+def log_request_end(response):
+    if hasattr(g, 'start_time'):
+        duration = time.time() - g.start_time
+        logger.info(
+            f"Request end: {request.method} {request.path} - Status: {response.status_code} - Duration: {duration:.4f}s"
+        )
+    return response
+
 app.secret_key = os.environ.get('SECRET_KEY', 'your_secret_key_here')  # 本番は環境変数
 app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_CONTENT_LENGTH', 10 * 1024 * 1024))
 app.permanent_session_lifetime = timedelta(
@@ -75,9 +114,20 @@ clear_audit_log()
 
 # === 1. 共通DBコネクション関数 ===
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    """リクエスト内で単一のDBコネクションを管理・提供する"""
+    db = getattr(g, '_database', None)
+    if db is None:
+        db = g._database = sqlite3.connect(DB_PATH, timeout=10)  # 10秒でタイムアウト
+        db.row_factory = sqlite3.Row
+    return db
+
+
+@app.teardown_appcontext
+def close_connection(exception):
+    """リクエスト終了時にDBコネクションを閉じる"""
+    db = getattr(g, '_database', None)
+    if db is not None:
+        db.close()
 
 
 def log_audit_event(action, user_id=None, user_name=None):
@@ -120,7 +170,6 @@ def inject_unread_count():
         (session['user_id'],),
     )
     count = c.fetchone()[0]
-    conn.close()
     return {'unread_count': count}
 
 # === SSE管理 ===
@@ -134,7 +183,6 @@ def get_unread_count(user_id):
         (user_id,),
     )
     count = c.fetchone()[0]
-    conn.close()
     return count
 
 def push_event(user_id, data):
@@ -243,7 +291,6 @@ def fetch_overtime_threshold(user_id, default='18:00'):
     c = conn.cursor()
     c.execute("SELECT overtime_threshold FROM users WHERE id = ?", (user_id,))
     row = c.fetchone()
-    conn.close()
     return row['overtime_threshold'] if row and row['overtime_threshold'] else default
 
 # === 8.1 メール設定管理 ===
@@ -254,7 +301,6 @@ def get_mail_settings():
         "SELECT server, port, username, password, use_tls, subject_template, body_template FROM mail_settings WHERE id = 1"
     )
     row = c.fetchone()
-    conn.close()
     return dict(row) if row else None
 
 
@@ -277,7 +323,6 @@ def save_mail_settings(server, port, username, password, use_tls, subject_tmpl, 
         (server, port, username, password, use_tls, subject_tmpl, body_tmpl),
     )
     conn.commit()
-    conn.close()
 
 
 def send_registration_email(to_email, name):
@@ -349,7 +394,6 @@ def generate_csv(user_id, name, year, month, target_dir, overtime_threshold='18:
         ORDER BY timestamp ASC
     """, (user_id, start.isoformat(), end.isoformat()))
     rows = c.fetchall()
-    conn.close()
     if not rows:
         return None
     daily_data = defaultdict(lambda: {'in': '', 'out': '', 'description': ''})
@@ -399,7 +443,6 @@ def redirect_to_setup_if_first_run():
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM users")
     count = c.fetchone()[0]
-    conn.close()
     if count == 0:
         return redirect(url_for('setup'))
 
@@ -430,7 +473,6 @@ def login():
             c = conn.cursor()
             c.execute("SELECT id, name, password_hash, is_admin, is_superadmin FROM users WHERE email = ?", (email,))
             user = c.fetchone()
-            conn.close()
             if not user or not check_password_hash(user['password_hash'], password):
                 errors['password'] = "メールアドレスまたはパスワードが正しくありません。"
 
@@ -473,7 +515,6 @@ def punch():
         WHERE user_id = ? AND type = ? AND substr(timestamp, 1, 10) = ?
     """, (user_id, punch_type, day))
     existing = c.fetchone()
-    conn.close()
     if existing:
         return render_template('confirm_punch.html', existing={
             'timestamp': existing['timestamp'], 'description': existing['description']
@@ -485,7 +526,6 @@ def punch():
     c.execute("INSERT INTO attendance (user_id, timestamp, type, description) VALUES (?, ?, ?, ?)",
               (user_id, timestamp, punch_type, description))
     conn.commit()
-    conn.close()
     log_audit_event(f'punch:{punch_type}', user_id, session.get('user_name'))
     flash("打刻しました。", "success")
     referer = request.form.get('referer', url_for('index'))
@@ -510,7 +550,6 @@ def resolve_punch():
         c.execute("INSERT INTO attendance (user_id, timestamp, type, description) VALUES (?, ?, ?, ?)",
                   (user_id, timestamp, punch_type, description))
         conn.commit()
-    conn.close()
     log_audit_event(
         f'resolve:{action}:{punch_type}', user_id, session.get('user_name')
     )
@@ -576,12 +615,10 @@ def my_password():
             row = c.fetchone()
             if not row or not check_password_hash(row['password_hash'], current):
                 errors['current_password'] = "現在のパスワードが正しくありません。"
-                conn.close()
             else:
                 new_hash = generate_password_hash(new)
                 c.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user_id))
                 conn.commit()
-                conn.close()
                 flash("パスワードを更新しました。", "success")
                 return redirect_embedded('my_password')
 
@@ -626,7 +663,6 @@ def import_csv():
                 time = normalize_time_str(row['退勤時刻'])
                 incoming[raw_date]['out'] = (f"{raw_date}T{time}:00", desc)
     except Exception:
-        conn.close()
         flash("CSVデータの形式が正しくありません。日付・時刻形式を確認してください。", "danger")
         return redirect(url_for('view_my_logs'))
     conflicts = []
@@ -649,10 +685,8 @@ def import_csv():
                     c.execute("INSERT INTO attendance (user_id, timestamp, type, description) VALUES (?, ?, ?, ?)",
                               (user_id, ts, typ, desc))
         conn.commit()
-        conn.close()
         flash("CSVインポートが完了しました。", "success")
         return redirect(url_for('view_my_logs'))
-    conn.close()
     return render_template('resolve_conflicts.html', conflicts=conflicts, incoming=incoming, user_id=user_id, referer=request.referrer or url_for('view_my_logs'))
 
 @app.route('/my/import/resolve', methods=['POST'])
@@ -687,7 +721,6 @@ def resolve_conflicts():
             except Exception:
                 errors.append(f"{key} の処理中に予期しないエラーが発生しました。")
     conn.commit()
-    conn.close()
     if errors:
         for msg in errors:
             flash(msg, "danger")
@@ -704,7 +737,6 @@ def view_my_logs():
     overtime_threshold = fetch_overtime_threshold(user_id)
     c.execute("SELECT timestamp, type, description FROM attendance WHERE user_id = ? ORDER BY timestamp", (user_id,))
     records = c.fetchall()
-    conn.close()
     attendance_by_day = {}
     for row in records:
         ts, typ, desc = row
@@ -746,14 +778,12 @@ def edit_log(date):
             c.execute("INSERT INTO attendance (user_id, timestamp, type, description) VALUES (?, ?, 'out', ?)",
                       (user_id, f"{date}T{out_time}:00", description or ''))
         conn.commit()
-        conn.close()
         return redirect(url_for('view_my_logs'))
     c.execute("""
         SELECT type, substr(timestamp, 12, 5), description FROM attendance
         WHERE user_id = ? AND substr(timestamp, 1, 10) = ?
     """, (user_id, date))
     rows = c.fetchall()
-    conn.close()
     in_time = out_time = description = ''
     for typ, time, desc in rows:
         if typ == 'in':
@@ -778,7 +808,6 @@ def can_chat(current_id, partner_id):
             (partner_id, current_id),
         )
     allowed = c.fetchone() is not None
-    conn.close()
     return allowed
 
 
@@ -787,7 +816,6 @@ def fetch_user_name(user_id):
     c = conn.cursor()
     c.execute("SELECT name FROM users WHERE id = ?", (user_id,))
     row = c.fetchone()
-    conn.close()
     return row['name'] if row else ''
 
 
@@ -801,7 +829,6 @@ def chat(partner_id):
     c = conn.cursor()
     if request.method == 'POST':
         if not check_csrf():
-            conn.close()
             return redirect(url_for('chat', partner_id=partner_id))
         message = request.form.get('message', '').strip()
         if message:
@@ -825,11 +852,9 @@ def chat(partner_id):
                 "timestamp": ts
             })
             push_unread(partner_id)
-        conn.close()
         return redirect(url_for('chat', partner_id=partner_id))
     limit = 20
-    c.execute(
-        """
+    c.execute("""
         SELECT id, sender_id, recipient_id, message, timestamp, is_read, read_timestamp
         FROM messages
         WHERE (sender_id = ? AND recipient_id = ?) OR
@@ -845,7 +870,6 @@ def chat(partner_id):
         rt = m['read_timestamp']
         if rt and rt > last_read:
             last_read = rt
-    conn.close()
     partner_name = fetch_user_name(partner_id)
     return render_template(
         'chat.html',
@@ -868,8 +892,7 @@ def poll_chat(partner_id):
     after_read = request.args.get('after_read', '1970-01-01 00:00:00')
     conn = get_db()
     c = conn.cursor()
-    c.execute(
-        """
+    c.execute("""
         SELECT id, sender_id, recipient_id, message, timestamp, is_read, read_timestamp
         FROM messages
         WHERE ((sender_id = ? AND recipient_id = ?) OR
@@ -884,7 +907,6 @@ def poll_chat(partner_id):
         (current_id, partner_id, after_read),
     )
     read_ids = [r['id'] for r in c.fetchall()]
-    conn.close()
     return {'messages': rows, 'reads': read_ids}
 
 
@@ -912,7 +934,6 @@ def chat_history(partner_id):
     params.append(limit)
     c.execute(query, params)
     rows = [dict(r) for r in c.fetchall()][::-1]
-    conn.close()
     return {'messages': rows}
 
 
@@ -937,7 +958,6 @@ def mark_chat_read(partner_id):
     )
     updated = c.rowcount
     conn.commit()
-    conn.close()
     if updated:
         push_event(partner_id, {"type": "read", "ids": ids})
         push_unread(session['user_id'])
@@ -954,7 +974,6 @@ def unread_count_api():
         (session['user_id'],),
     )
     count = c.fetchone()[0]
-    conn.close()
     return {'count': count}
 
 
@@ -965,8 +984,7 @@ def unread_counts_api():
     conn = get_db()
     c = conn.cursor()
     if session.get('is_admin'):
-        c.execute(
-            """
+        c.execute("""
             SELECT u.id, COUNT(msg.id) AS unread
             FROM users u
             INNER JOIN admin_managed_users m ON u.id = m.user_id
@@ -977,8 +995,7 @@ def unread_counts_api():
             (user_id, user_id),
         )
     else:
-        c.execute(
-            """
+        c.execute("""
             SELECT u.id, COUNT(msg.id) AS unread
             FROM users u
             INNER JOIN admin_managed_users m ON u.id = m.admin_id
@@ -989,7 +1006,6 @@ def unread_counts_api():
             (user_id, user_id),
         )
     rows = c.fetchall()
-    conn.close()
     return {row['id']: row['unread'] for row in rows}
 
 
@@ -1032,8 +1048,7 @@ def my_chat():
     user_id = session['user_id']
     conn = get_db()
     c = conn.cursor()
-    c.execute(
-        """
+    c.execute("""
         SELECT u.id, u.name, COUNT(msg.id) AS unread
         FROM users u
         INNER JOIN admin_managed_users m ON u.id = m.admin_id
@@ -1045,7 +1060,6 @@ def my_chat():
         (user_id, user_id),
     )
     admins = c.fetchall()
-    conn.close()
     if not admins:
         return 'チャット可能な管理者が設定されていません'
     return render_template('chat_list.html', users=admins, as_admin=False)
@@ -1057,8 +1071,7 @@ def admin_chat_index():
     admin_id = session['user_id']
     conn = get_db()
     c = conn.cursor()
-    c.execute(
-        """
+    c.execute("""
         SELECT u.id, u.name, COUNT(msg.id) AS unread
         FROM users u
         INNER JOIN admin_managed_users m ON u.id = m.user_id
@@ -1070,7 +1083,6 @@ def admin_chat_index():
         (admin_id, admin_id),
     )
     users = c.fetchall()
-    conn.close()
     return render_template('chat_list.html', users=users, as_admin=True)
 
 
@@ -1094,7 +1106,6 @@ def export_combined():
         ORDER BY u.name
     """, (admin_id,))
     user_list = c.fetchall()
-    conn.close()
     now = datetime.now()
     years = list(range(now.year - 3, now.year + 2))
     if request.method == 'POST':
@@ -1109,7 +1120,6 @@ def export_combined():
             c = conn.cursor()
             c.execute("SELECT name FROM users WHERE id = ?", (user_id,))
             row = c.fetchone()
-            conn.close()
             if not row:
                 return 'ユーザーが見つかりません'
             name = row['name']
@@ -1146,7 +1156,6 @@ def list_users():
     all_users = c.fetchall()
     c.execute("SELECT user_id FROM admin_managed_users WHERE admin_id = ?", (admin_id,))
     managed_ids = {row['user_id'] for row in c.fetchall()}
-    conn.close()
     users = [
         {'id_name': u, 'is_managed': u['id'] in managed_ids}
         for u in all_users
@@ -1189,10 +1198,8 @@ def create_user():
             conn.commit()
             send_registration_email(email, name)
         except sqlite3.IntegrityError:
-            conn.close()
             errors['email'] = "このメールアドレスはすでに登録されています。"
             return render_template('create_user.html', errors=errors)
-        conn.close()
         flash("ユーザーを作成しました。", "success")
         return redirect_embedded('list_users')
     return render_template('create_user.html', errors=errors)
@@ -1211,7 +1218,6 @@ def update_managed_users():
     for user_id in selected_ids:
         c.execute("INSERT INTO admin_managed_users (admin_id, user_id) VALUES (?, ?)", (admin_id, user_id))
     conn.commit()
-    conn.close()
     flash("管理対象を更新しました。", "success")
     return redirect_embedded('list_users')
 
@@ -1223,7 +1229,6 @@ def edit_user(user_id):
     c.execute("SELECT name, email, is_admin, overtime_threshold, is_superadmin FROM users WHERE id = ?", (user_id,))
     user = c.fetchone()
     if not user:
-        conn.close()
         flash("ユーザーが見つかりません。", "danger")
         return redirect_embedded('list_users')
 
@@ -1248,7 +1253,6 @@ def edit_user(user_id):
             errors['new_password'] = "パスワードは8文字以上で入力してください。"
 
         if errors:
-            conn.close()
             return render_template('edit_user.html', user_id=user_id, user=user, errors=errors)
 
         try:
@@ -1262,12 +1266,9 @@ def edit_user(user_id):
             flash("ユーザー情報を更新しました。", "success")
         except sqlite3.IntegrityError:
             errors['email'] = "このメールアドレスは既に登録されています。"
-            conn.close()
             return render_template('edit_user.html', user_id=user_id, user=user, errors=errors)
-        conn.close()
         return redirect_embedded('list_users')
 
-    conn.close()
     return render_template('edit_user.html', user_id=user_id, user=user, errors=errors)
 
 @app.route('/admin/users/delete/<int:user_id>', methods=['GET', 'POST'])
@@ -1278,21 +1279,17 @@ def delete_user(user_id):
     c.execute("SELECT id, name, is_superadmin FROM users WHERE id = ?", (user_id,))
     user = c.fetchone()
     if not user:
-        conn.close()
         flash("ユーザーが見つかりません。", "danger")
         return redirect_embedded('list_users')
 
     if request.method == 'POST':
         if not check_csrf():
-            conn.close()
             return redirect_embedded('list_users')
         if user_id == session.get('user_id'):
             flash("自分自身のアカウントは削除できません。", "danger")
-            conn.close()
             return redirect_embedded('list_users')
         if user['is_superadmin']:
             flash("スーパー管理者は削除できません。", "danger")
-            conn.close()
             return redirect_embedded('list_users')
         c.execute(
             "DELETE FROM messages WHERE sender_id = ? OR recipient_id = ?",
@@ -1300,11 +1297,9 @@ def delete_user(user_id):
         )
         c.execute("DELETE FROM users WHERE id = ?", (user_id,))
         conn.commit()
-        conn.close()
         flash("ユーザーを削除しました。", "success")
         return redirect_embedded('list_users')
 
-    conn.close()
     return render_template('confirm_delete_user.html', user=user)
 
 
@@ -1371,9 +1366,9 @@ def update_system():
     critical_changes = False
     changed_files = []
     if local is None:
-        error = 'Gitリポジトリではありません。'
+        error = 'Gitリポジリではありません。'
     elif remote is None:
-        error = 'リモートリポジトリが設定されていません。'
+        error = 'リモートリポジリが設定されていません。'
     else:
         update_available = local != remote
         if update_available:
@@ -1424,7 +1419,6 @@ def setup():
     c.execute("SELECT COUNT(*) FROM users")
     count = c.fetchone()[0]
     if count > 0:
-        conn.close()
         return redirect(url_for('login'))
     if request.method == 'POST':
         if not check_csrf():
@@ -1447,14 +1441,11 @@ def setup():
         if errors:
             for msg in errors:
                 flash(msg, "danger")
-            conn.close()
             return redirect(url_for('setup'))
         password_hash = generate_password_hash(password)
         c.execute("INSERT INTO users (email, name, password_hash, is_admin, is_superadmin) VALUES (?, ?, ?, 1, 1)",(email, name, password_hash))
         conn.commit()
-        conn.close()
         return redirect(url_for('login'))
-    conn.close()
     return render_template('setup.html')
 
 if __name__ == '__main__':
