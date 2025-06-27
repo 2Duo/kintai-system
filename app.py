@@ -153,7 +153,8 @@ app.jinja_env.globals['csrf_token'] = generate_csrf_token
 def check_csrf():
     if request.method == 'POST':
         token = request.form.get('_csrf_token')
-        if not token or session.get('_csrf_token') != token:
+        session_token = session.get('_csrf_token')
+        if not token or not session_token or not secrets.compare_digest(session_token, token):
             flash("セッションエラーが発生しました。やり直してください。", "danger")
             return False
     return True
