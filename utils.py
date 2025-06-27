@@ -8,6 +8,7 @@ __all__ = [
     'safe_fromisoformat',
     'normalize_time_str',
     'calculate_overtime',
+    'sanitize_filename',
 ]
 
 def is_valid_email(email: str) -> bool:
@@ -84,4 +85,9 @@ def calculate_overtime(out_time: str, threshold: str = '18:00') -> str:
     except ValueError:
         return ''
     return ''
+
+
+def sanitize_filename(name: str) -> str:
+    """Return a filename-safe string made of alphanumerics, hyphen and underscore."""
+    return re.sub(r'[^A-Za-z0-9_-]+', '', name)
 

@@ -38,7 +38,8 @@ import json
 import time
 from utils import (
     is_valid_email, is_valid_time, get_client_info,
-    safe_fromisoformat, normalize_time_str, calculate_overtime
+    safe_fromisoformat, normalize_time_str, calculate_overtime,
+    sanitize_filename,
 )
 try:
     from gevent.queue import Queue, Empty
@@ -407,7 +408,8 @@ def generate_csv(user_id, name, year, month, target_dir, overtime_threshold='18:
         elif typ == 'out':
             daily_data[day]['out'] = time
             daily_data[day]['description'] = desc or ''
-    filename = f"{name}_{year}_{month:02d}_勤怠記録.csv"
+    safe_name = sanitize_filename(name)
+    filename = f"{safe_name}_{year}_{month:02d}_勤怠記録.csv"
     filepath = os.path.join(target_dir, filename)
     with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.writer(f)
