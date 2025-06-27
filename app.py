@@ -562,9 +562,11 @@ def resolve_punch():
 @app.route('/exports/<path:filename>')
 @admin_required
 def download_export_file(filename):
-    export_root = os.path.abspath(EXPORT_DIR)
-    filepath = os.path.abspath(os.path.join(EXPORT_DIR, filename))
+    export_root = os.path.realpath(EXPORT_DIR)
+    filepath = os.path.realpath(os.path.join(EXPORT_DIR, filename))
     if not filepath.startswith(export_root + os.sep):
+        return '不正なファイルパスです', 400
+    if os.path.islink(os.path.join(EXPORT_DIR, filename)):
         return '不正なファイルパスです', 400
     if not os.path.isfile(filepath):
         return 'ファイルが存在しません', 404
