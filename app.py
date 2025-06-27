@@ -247,44 +247,6 @@ def initialize_database():
 initialize_database()
 
 # === 8. 各種ユーティリティ ===
-def safe_fromisoformat(ts):
-    try:
-        return datetime.fromisoformat(ts)
-    except ValueError:
-        parts = ts.split('T')
-        if len(parts) == 2:
-            date_part, time_part = parts
-            if len(time_part.split(':')[0]) == 1:
-                time_part = '0' + time_part
-                ts = f"{date_part}T{time_part}"
-        return datetime.fromisoformat(ts)
-
-def normalize_time_str(time_str):
-    try:
-        dt = datetime.strptime(time_str, '%H:%M')
-        return dt.strftime('%H:%M')
-    except ValueError:
-        return time_str
-
-def calculate_overtime(out_time, threshold='18:00', in_time=None):
-    """Calculate overtime string from out_time, threshold and optional in_time."""
-    try:
-        out_dt = datetime.strptime(out_time, '%H:%M')
-        start_dt = datetime.strptime(threshold or '18:00', '%H:%M')
-        if in_time:
-            try:
-                in_dt = datetime.strptime(in_time, '%H:%M')
-                if in_dt > start_dt:
-                    start_dt = in_dt
-            except ValueError:
-                pass
-        if out_dt > start_dt:
-            delta = out_dt - start_dt
-            hours, minutes = divmod(delta.seconds // 60, 60)
-            return f"{hours:02d}:{minutes:02d}"
-    except ValueError:
-        return ''
-    return ''
 
 def fetch_overtime_threshold(user_id, default='18:00'):
     conn = get_db()
