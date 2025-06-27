@@ -11,8 +11,14 @@ def client(tmp_path):
     app.config['TESTING'] = True
 
     original_db = app_module.DB_PATH
+    original_export = app_module.EXPORT_DIR
+
     test_db = tmp_path / "test.db"
+    export_dir = tmp_path / "exports"
+    export_dir.mkdir()
+
     app_module.DB_PATH = str(test_db)
+    app_module.EXPORT_DIR = str(export_dir)
     app_module.initialize_database()
 
     conn = sqlite3.connect(app_module.DB_PATH)
@@ -33,7 +39,17 @@ def client(tmp_path):
     if os.path.exists(app_module.DB_PATH):
         os.remove(app_module.DB_PATH)
     app_module.DB_PATH = original_db
+    app_module.EXPORT_DIR = original_export
 
 def test_path_traversal_rejected(client):
     resp = client.get('/exports/../app.py')
+    assert resp.status_code == 400
+
+
+def test_symlink_traversal_rejected(client, tmp_path):
+    outside = tmp_path / 'outside.csv'
+    outside.write_text('secret')
+    link = os.path.join(app_module.EXPORT_DIR, 'link.csv')
+    os.symlink(outside, link)
+    resp = client.get('/exports/link.csv')
     assert resp.status_code == 400
