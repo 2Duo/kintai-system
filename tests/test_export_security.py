@@ -48,7 +48,7 @@ def test_path_traversal_rejected(client):
 @pytest.mark.parametrize("name", ["../bad", "user/evil"])
 def test_generate_csv_name_sanitization(client, tmp_path, name):
     export_dir = tmp_path / "exports"
-    export_dir.mkdir()
+    export_dir.mkdir(exist_ok=True)
     conn = sqlite3.connect(app_module.DB_PATH)
     conn.execute(
         "INSERT INTO attendance (user_id, timestamp, type) VALUES (1, '2023-01-01T09:00:00', 'in')"
