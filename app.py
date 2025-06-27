@@ -107,11 +107,11 @@ AUDIT_LOG_PATH = os.environ.get(
 os.makedirs(os.path.dirname(AUDIT_LOG_PATH), exist_ok=True)
 
 def clear_audit_log():
-    """サービス起動時に監査ログを空にする"""
+    """監査ログを空にするユーティリティ"""
     with open(AUDIT_LOG_PATH, 'w', encoding='utf-8'):
         pass
 
-clear_audit_log()
+# サービス起動時の自動クリアは廃止
 
 # === 1. 共通DBコネクション関数 ===
 def get_db():
@@ -1416,7 +1416,19 @@ def setup():
     return render_template('setup.html')
 
 if __name__ == '__main__':
-    debug_env = os.environ.get('FLASK_DEBUG', '0')
-    debug_mode = str(debug_env).lower() in ('1', 'true', 'yes')
-    # 開発サーバーでもSSEを扱えるようスレッドモードを有効化
-    app.run(host='0.0.0.0', port=8000, debug=debug_mode, threaded=True)
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Kintai System')
+    parser.add_argument(
+        '--clear-audit-log', action='store_true',
+        help='監査ログをクリアして終了')
+    args = parser.parse_args()
+
+    if args.clear_audit_log:
+        clear_audit_log()
+        print('Audit log cleared.')
+    else:
+        debug_env = os.environ.get('FLASK_DEBUG', '0')
+        debug_mode = str(debug_env).lower() in ('1', 'true', 'yes')
+        # 開発サーバーでもSSEを扱えるようスレッドモードを有効化
+        app.run(host='0.0.0.0', port=8000, debug=debug_mode, threaded=True)

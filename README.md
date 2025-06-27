@@ -70,6 +70,15 @@ kintai-system/
 | `SESSION_LIFETIME_DAYS` | ログインを保持する日数 |
 | `AUDIT_LOG_PATH` | 監査ログの保存先 |
 
+### 監査ログの管理
+監査ログはサービス起動時に自動で削除されません。不要になった場合は
+次のコマンドで手動クリアしてください。
+
+```bash
+python app.py --clear-audit-log
+```
+定期的なローテーションには `logrotate` などのツールをご利用ください。
+
 ---
 
 ## 本番運用例 (gunicorn + systemd)
