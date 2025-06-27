@@ -4,6 +4,8 @@ try:
 except ImportError:
     pass
 
+"""勤怠管理 Flask アプリケーションのメインモジュール"""
+
 from flask import (
     Flask,
     g,
@@ -53,7 +55,7 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# === ロギング設定 ===
+# ロギング設定
 log_dir = os.path.join(os.path.dirname(__file__), 'logs')
 os.makedirs(log_dir, exist_ok=True)
 log_file = os.path.join(log_dir, 'app.log')
@@ -113,7 +115,7 @@ def clear_audit_log():
 
 # サービス起動時の自動クリアは廃止
 
-# === 1. 共通DBコネクション関数 ===
+# データベース接続ユーティリティ
 def get_db():
     """リクエスト内で単一のDBコネクションを管理・提供する"""
     db = getattr(g, '_database', None)
@@ -144,7 +146,7 @@ def log_audit_event(action, user_id=None, user_name=None):
     with open(AUDIT_LOG_PATH, 'a', encoding='utf-8') as f:
         f.write(line)
 
-# === 3. CSRFトークン管理 ===
+# CSRF トークン関連
 def generate_csrf_token():
     if '_csrf_token' not in session:
         session['_csrf_token'] = secrets.token_hex(16)
@@ -174,7 +176,7 @@ def inject_unread_count():
     count = c.fetchone()[0]
     return {'unread_count': count}
 
-# === SSE管理 ===
+# SSE 管理
 user_streams = defaultdict(WeakSet)
 
 def get_unread_count(user_id):
@@ -194,7 +196,7 @@ def push_event(user_id, data):
 def push_unread(user_id):
     push_event(user_id, {"type": "unread", "count": get_unread_count(user_id)})
 
-# === 4. ログイン/権限チェックデコレーター ===
+# 認証・権限チェックデコレータ
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -226,18 +228,18 @@ def redirect_embedded(endpoint, **values):
         values['embedded'] = embedded
     return redirect(url_for(endpoint, **values))
 
-# === 5. ファイル検証 ===
+# ファイル検証
 ALLOWED_EXTENSIONS = {'csv'}
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# === 6. エラーハンドリング ===
+# エラーハンドリング
 @app.errorhandler(RequestEntityTooLarge)
 def handle_file_too_large(e):
     flash("アップロードできるファイルサイズを超えています。", "danger")
     return redirect(url_for('view_my_logs')), 413
 
-# === 7. DB初期化 ===
+# データベース初期化
 def initialize_database():
     """テーブルとインデックスを確実に作成する"""
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
@@ -248,7 +250,7 @@ def initialize_database():
     conn.close()
 initialize_database()
 
-# === 8. 各種ユーティリティ ===
+# ユーティリティ
 
 def fetch_overtime_threshold(user_id, default='18:00'):
     conn = get_db()
@@ -257,7 +259,7 @@ def fetch_overtime_threshold(user_id, default='18:00'):
     row = c.fetchone()
     return row['overtime_threshold'] if row and row['overtime_threshold'] else default
 
-# === 8.1 メール設定管理 ===
+# メール設定管理
 def get_mail_settings():
     conn = get_db()
     c = conn.cursor()
@@ -311,7 +313,7 @@ def send_registration_email(to_email, name):
         app.logger.error(f"メール送信に失敗しました: {e}")
 
 
-# === 8.2 アップデート管理 ===
+# アップデート管理
 
 def get_git_commits():
     """ローカルとリモートの最新コミットを取得する"""
@@ -346,7 +348,7 @@ def perform_git_pull():
     except Exception as e:
         return str(e)
 
-# === 9. CSV出力ロジック一本化 ===
+# CSV 出力ヘルパ
 def generate_csv(user_id, name, year, month, target_dir, overtime_threshold='18:00'):
     conn = get_db()
     c = conn.cursor()
@@ -397,7 +399,7 @@ def delete_old_exports(base_dir='exports', days=30):
             if os.path.isfile(path) and os.path.getmtime(path) < threshold.timestamp():
                 os.remove(path)
 
-# === 10. 初回起動時セットアップ画面リダイレクト ===
+# 初回起動時のセットアップリダイレクト
 @app.before_request
 def redirect_to_setup_if_first_run():
     if app.config.get('TESTING'):
@@ -411,7 +413,7 @@ def redirect_to_setup_if_first_run():
     if count == 0:
         return redirect(url_for('setup'))
 
-# === 11. 各route ===
+# ルーティング
 
 @app.route('/')
 @login_required
