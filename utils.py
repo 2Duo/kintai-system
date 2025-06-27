@@ -73,13 +73,20 @@ def normalize_time_str(time_str: str) -> str:
         return time_str
 
 
-def calculate_overtime(out_time: str, threshold: str = '18:00') -> str:
-    """Return overtime string calculated from out_time and threshold."""
+def calculate_overtime(out_time: str, threshold: str = '18:00', in_time: str | None = None) -> str:
+    """Return overtime string calculated from out_time, threshold and optional in_time."""
     try:
         out_dt = datetime.strptime(out_time, '%H:%M')
-        th_dt = datetime.strptime(threshold or '18:00', '%H:%M')
-        if out_dt > th_dt:
-            delta = out_dt - th_dt
+        start_dt = datetime.strptime(threshold or '18:00', '%H:%M')
+        if in_time:
+            try:
+                in_dt = datetime.strptime(in_time, '%H:%M')
+                if in_dt > start_dt:
+                    start_dt = in_dt
+            except ValueError:
+                pass
+        if out_dt > start_dt:
+            delta = out_dt - start_dt
             hours, minutes = divmod(delta.seconds // 60, 60)
             return f"{hours:02d}:{minutes:02d}"
     except ValueError:
