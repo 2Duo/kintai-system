@@ -45,6 +45,23 @@ def test_path_traversal_rejected(client):
     resp = client.get('/exports/../app.py')
     assert resp.status_code == 400
 
+@pytest.mark.parametrize("name", ["../bad", "user/evil"])
+def test_generate_csv_name_sanitization(client, tmp_path, name):
+    export_dir = tmp_path / "exports"
+    export_dir.mkdir()
+    conn = sqlite3.connect(app_module.DB_PATH)
+    conn.execute(
+        "INSERT INTO attendance (user_id, timestamp, type) VALUES (1, '2023-01-01T09:00:00', 'in')"
+    )
+    conn.execute(
+        "INSERT INTO attendance (user_id, timestamp, type) VALUES (1, '2023-01-01T18:00:00', 'out')"
+    )
+    conn.commit()
+    conn.close()
+    with app.app_context():
+        path = app_module.generate_csv(1, name, 2023, 1, str(export_dir))
+    assert os.path.commonpath([str(export_dir), path]) == str(export_dir)
+    assert os.path.isfile(path)
 
 def test_symlink_traversal_rejected(client, tmp_path):
     outside = tmp_path / 'outside.csv'
