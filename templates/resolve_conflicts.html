@@ -5,10 +5,10 @@
 <h1 class="mb-3">CSVインポート時の衝突確認</h1>
 <p class="mb-4">以下のデータにおいて既存の記録が存在します。上書きするかどうかを選択してください。</p>
 
-<form method="POST" action="{{ url_for('resolve_conflicts') }}">
+<form method="POST" action="{{ url_for('attendance.resolve_conflicts') }}">
   <!-- CSRFトークン追加 -->
   <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-  <input type="hidden" name="referer" value="{{ url_for('view_my_logs') }}">
+  <input type="hidden" name="referer" value="{{ url_for('attendance.view_my_logs') }}">
 
   <div class="table-responsive">
     <table class="table table-bordered align-middle text-nowrap">

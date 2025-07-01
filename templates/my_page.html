@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+
+{% block title %}マイページ{% endblock %}
+
+{% block content %}
+<h1>マイページ</h1>
+
+<div class="row">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">
+        <h5>ユーザー情報</h5>
+      </div>
+      <div class="card-body">
+        <p><strong>名前:</strong> {{ session.get('user_name', 'N/A') }}</p>
+        <p><strong>メールアドレス:</strong> {{ session.get('user_email', 'N/A') }}</p>
+        <p><strong>権限:</strong> 
+          {% if session.get('is_superadmin') %}
+            スーパー管理者
+          {% elif session.get('is_admin') %}
+            管理者
+          {% else %}
+            一般ユーザー
+          {% endif %}
+        </p>
+      </div>
+    </div>
+  </div>
+  
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">
+        <h5>アカウント設定</h5>
+      </div>
+      <div class="card-body">
+        <a href="{{ url_for('auth.change_password') }}" class="btn btn-primary">パスワード変更</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row mt-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <h5>クイックアクション</h5>
+      </div>
+      <div class="card-body">
+        <a href="{{ url_for('attendance.index') }}" class="btn btn-success me-2">打刻</a>
+        <a href="{{ url_for('attendance.view_my_logs') }}" class="btn btn-info me-2">勤怠履歴</a>
+        <a href="{{ url_for('chat.my_chat') }}" class="btn btn-warning me-2">チャット</a>
+        {% if session.get('is_admin') %}
+        <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary">管理画面</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

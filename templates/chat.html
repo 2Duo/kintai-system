@@ -33,7 +33,7 @@ let earliest = {{ earliest }};
 let loading = false;
 
 async function markRead(){
-  const resp = await fetch('{{ url_for('mark_chat_read', partner_id=partner_id) }}', {
+  const resp = await fetch('{{ url_for('chat.mark_read', partner_id=partner_id) }}', {
     method: 'POST',
     headers: {'Content-Type': 'application/x-www-form-urlencoded'},
     body: '_csrf_token=' + encodeURIComponent(csrfToken)
@@ -92,7 +92,7 @@ async function fetchHistory(){
   if(loading || earliest <= 1){ return; }
   loading = true;
   const prevHeight = box.scrollHeight;
-  const resp = await fetch('{{ url_for('chat_history', partner_id=partner_id) }}?before=' + earliest);
+  const resp = await fetch('{{ url_for('chat.history', partner_id=partner_id) }}?before=' + earliest);
   if(resp.ok){
     const data = await resp.json();
     data.messages.forEach(prependMessage);
@@ -111,7 +111,7 @@ if('Notification' in window && Notification.permission === 'default'){
 }
 let chatEvt;
 function connectChatSSE(){
-  chatEvt = new EventSource('{{ url_for('sse_events') }}');
+  chatEvt = new EventSource('{{ url_for('chat.events') }}');
   chatEvt.onmessage = e => {
     const data = JSON.parse(e.data);
     if(data.type === 'message' && data.sender_id == {{ partner_id }}){

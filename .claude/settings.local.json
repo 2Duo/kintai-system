@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git branch:*)",
+      "Bash(mkdir:*)",
+      "Bash(mv:*)",
+      "Bash(python run.py:*)",
+      "Bash(python:*)",
+      "Bash(rg:*)",
+      "Bash(true)",
+      "Bash(curl:*)",
+      "Bash(pkill:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(CSRF_TOKEN=de3e36dd66324616dd3261c97b3c6bf4)",
+      "Bash(sqlite3:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
+    ],
+    "deny": []
+  }
+}

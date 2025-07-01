@@ -33,7 +33,7 @@
   </table>
 </div>
 
-<form action="{{ url_for('resolve_punch') }}" method="post" class="mt-4">
+<form action="{{ url_for('attendance.resolve_punch') }}" method="post" class="mt-4">
   <!-- CSRFトークン追加 -->
   <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="timestamp" value="{{ incoming.timestamp }}">

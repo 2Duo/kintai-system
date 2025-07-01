@@ -36,7 +36,7 @@
         <td>{{ data.out.description if data.out else '' }}</td>
         <td>{{ data.overtime }}</td>
         <td>
-          <a href="{{ url_for('edit_log', date=date) }}" class="btn btn-sm btn-outline-primary">編集</a>
+          <a href="{{ url_for('attendance.edit_log', date=date) }}" class="btn btn-sm btn-outline-primary">編集</a>
         </td>
       </tr>
       {% endfor %}
@@ -44,7 +44,7 @@
   </table>
 </div>
 
-<form action="{{ url_for('import_csv') }}" method="POST" enctype="multipart/form-data" class="mt-4">
+<form action="{{ url_for('attendance.import_csv') }}" method="POST" enctype="multipart/form-data" class="mt-4">
   <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
   <div class="mb-3">
     <label class="form-label" for="csvFile">CSVファイルを選択</label>

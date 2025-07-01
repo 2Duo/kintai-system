@@ -2,6 +2,6 @@
 {% block title %}監査ログ{% endblock %}
 {% block content %}
 <h1 class="mb-3">監査ログ</h1>
-<a class="btn btn-outline-secondary mb-3" href="{{ url_for('download_audit_log') }}">.logダウンロード</a>
-<pre class="border p-3 font-monospace lh-1 mb-0" style="max-height:600px; overflow:auto;">{{ log_text }}</pre>
+<a class="btn btn-outline-secondary mb-3" href="{{ url_for('admin.download_audit_log') }}">.logダウンロード</a>
+<pre class="border p-3 font-monospace lh-1 mb-0" style="max-height:600px; overflow:auto;">{% for line in log_lines %}{{ line }}{% endfor %}</pre>
 {% endblock %}

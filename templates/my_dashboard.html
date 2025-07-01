@@ -17,8 +17,8 @@
 <div class="row">
   <div class="col-md-3 mb-3">
     <div class="list-group" id="my-menu">
-      <a href="{{ url_for('my_profile') }}" class="list-group-item list-group-item-action">プロフィール</a>
-      <a href="{{ url_for('my_password') }}" class="list-group-item list-group-item-action">パスワード変更</a>
+      <a href="{{ url_for('auth.my_profile') }}" class="list-group-item list-group-item-action">プロフィール</a>
+      <a href="{{ url_for('auth.change_password') }}" class="list-group-item list-group-item-action">パスワード変更</a>
     </div>
   </div>
   <div class="col-md-9" id="my-frame-wrapper" style="overflow:hidden">

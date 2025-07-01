@@ -4,7 +4,7 @@
 
 {% block content %}
 <h1>勤怠打刻</h1>
-<form method="POST" action="{{ url_for('punch') }}" onkeydown="return event.key !== 'Enter';">
+<form method="POST" action="{{ url_for('attendance.punch') }}" onkeydown="return event.key !== 'Enter';">
   <!-- CSRFトークン追加 -->
   <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
   <div class="mb-3">

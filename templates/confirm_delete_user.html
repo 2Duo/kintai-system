@@ -9,7 +9,7 @@
   <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
   <div class="d-grid gap-2">
     <button type="submit" class="btn btn-danger">削除</button>
-    <a href="{{ url_for('list_users') }}" class="btn btn-outline-secondary">キャンセル</a>
+    <a href="{{ url_for('admin.users') }}" class="btn btn-outline-secondary">キャンセル</a>
   </div>
 </form>
 {% endblock %}
