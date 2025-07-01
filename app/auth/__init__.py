@@ -56,7 +56,10 @@ def load_user():
     if user_id is None:
         g.user = None
     else:
-        g.user = User.get_by_id(user_id)
+        try:
+            g.user = User.get_by_id(user_id)
+        except Exception:
+            g.user = None
 
 @auth_bp.before_app_request
 def check_setup():
@@ -70,7 +73,8 @@ def check_setup():
         if not users:
             return redirect(url_for('auth.setup'))
     except Exception:
-        return redirect(url_for('auth.setup'))
+        # データベースが未初期化の場合はセットアップへリダイレクトしない
+        return
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():

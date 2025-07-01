@@ -6,6 +6,7 @@ import tempfile
 from collections import defaultdict
 from io import TextIOWrapper
 from ..auth import login_required, check_csrf
+from ..utils import allowed_file
 from ..models import User, Attendance
 from ..utils.validators import is_valid_time
 from ..utils.datetime_helpers import safe_fromisoformat, normalize_time_str, calculate_overtime
@@ -258,6 +259,7 @@ def export_csv():
     return redirect(url_for('attendance.view_my_logs'))
 
 @attendance_bp.route('/import_csv', methods=['POST'])
+@attendance_bp.route('/my/import', methods=['POST'])  # 互換ルート
 @login_required
 def import_csv():
     """CSV インポート"""
@@ -273,7 +275,7 @@ def import_csv():
         flash("ファイルが選択されていません", "danger")
         return redirect(url_for('attendance.view_my_logs'))
     
-    if not file.filename.lower().endswith('.csv'):
+    if not allowed_file(file.filename):
         flash("CSVファイルを選択してください", "danger")
         return redirect(url_for('attendance.view_my_logs'))
     
