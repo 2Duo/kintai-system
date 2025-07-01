@@ -39,15 +39,9 @@ def users():
     admin_id = session['user_id']
     
     # 現在の管理対象ユーザーを取得
-    if not session.get('is_superadmin'):
-        managed_users = User.get_managed_users(admin_id)
-        managed_user_ids = {user[0] for user in managed_users}
-        # 一般管理者の場合、管理対象ユーザーのみ表示
-        all_users = [user for user in all_users if user[0] in managed_user_ids or user[0] == admin_id]
-    else:
-        # スーパー管理者の場合は全ユーザーの管理状況を表示するため、管理対象を取得
-        managed_users = User.get_managed_users(admin_id)
-        managed_user_ids = {user[0] for user in managed_users}
+    managed_users = User.get_managed_users(admin_id)
+    managed_user_ids = {user[0] for user in managed_users}
+    # 管理者もスーパー管理者も全ユーザーを表示
     
     return render_template('admin_users.html', users=all_users, managed_user_ids=managed_user_ids)
 
@@ -345,16 +339,20 @@ def export():
         except Exception as e:
             flash("エクスポートに失敗しました", "danger")
     
-    # 管理対象ユーザー一覧を取得
-    if session.get('is_superadmin'):
+    # 全ユーザー一覧を取得（管理者もスーパー管理者も全ユーザーを表示）
+    try:
         users = User.get_all()
-    else:
-        admin_id = session['user_id']
-        users = User.get_managed_users(admin_id)
-    
-    from datetime import datetime
-    now = datetime.now()
-    return render_template('export.html', users=users, now=now)
+        from datetime import datetime
+        now = datetime.now()
+        # 年の選択肢を生成（過去5年から来年まで）
+        years = list(range(now.year - 5, now.year + 2))
+        return render_template('export.html', user_list=users, now=now, years=years)
+    except Exception as e:
+        print(f"Export page error: {e}")
+        import traceback
+        traceback.print_exc()
+        flash("ユーザー一覧の取得に失敗しました", "danger")
+        return redirect(url_for('admin.dashboard'))
 
 @admin_bp.route('/mail_settings', methods=['GET', 'POST'])
 @superadmin_required
