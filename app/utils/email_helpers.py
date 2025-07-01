@@ -192,5 +192,10 @@ def parse_email_addresses(address_string: str) -> list:
         addr = addr.strip()
         if addr and '@' in addr:
             clean_addresses.append(addr)
-    
+
     return clean_addresses
+
+
+def send_registration_email(to_email: str, name: str) -> tuple[bool, str]:
+    """ユーザー登録通知メールを送信"""
+    return send_notification_email(to_email, 'user_created', name=name)

@@ -11,7 +11,7 @@ from ..utils.validators import is_valid_email
 from ..utils.audit import log_audit_event
 from ..utils.csv_helpers import generate_csv
 from ..utils.file_helpers import sanitize_filename, delete_old_exports
-from ..utils.email_helpers import send_email
+from ..utils.email_helpers import send_email, send_registration_email
 from ..utils.git_helpers import get_git_commits, update_system
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
@@ -92,10 +92,16 @@ def create_user():
         try:
             # ユーザー作成
             user_id = User.create(email, name, password, is_admin, is_superadmin, overtime_threshold)
-            
+
             # 一般管理者が作成した場合、自動的に管理対象に追加
             if not session.get('is_superadmin'):
                 AdminManagedUsers.add_managed_user(session['user_id'], user_id)
+
+            # 登録通知メールを送信（失敗しても処理続行）
+            try:
+                send_registration_email(email, name)
+            except Exception:
+                pass
             
             log_audit_event("user_created", session['user_id'], f"Created user: {name}")
             flash("ユーザーを作成しました", "success")

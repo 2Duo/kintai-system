@@ -4,7 +4,7 @@ try:
 except ImportError:
     pass
 
-from flask import Flask, g, request
+from flask import Flask, g, request, send_file
 from datetime import timedelta
 import os
 import sqlite3
@@ -15,6 +15,10 @@ import secrets
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# デフォルトのデータベースパス
+DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'database', 'kintai.db')
+EXPORT_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'exports')
 
 def create_app(config=None):
     """アプリケーションファクトリ"""
@@ -43,15 +47,20 @@ def create_app(config=None):
     
     # データベース設定
     setup_database(app)
+
+    # エクスポートディレクトリ設定
+    os.makedirs(EXPORT_DIR, exist_ok=True)
+    app.config['EXPORT_DIR'] = EXPORT_DIR
     
     # リクエスト処理
     setup_request_handlers(app)
+    register_error_handlers(app)
     
     # Jinja2環境の設定
     setup_jinja2(app)
     
     # Blueprintの登録
-    from app.auth import auth_bp
+    from app.auth import auth_bp, admin_required
     from app.attendance import attendance_bp
     from app.chat import chat_bp
     from app.admin import admin_bp
@@ -60,6 +69,20 @@ def create_app(config=None):
     app.register_blueprint(attendance_bp)
     app.register_blueprint(chat_bp, url_prefix='/chat')
     app.register_blueprint(admin_bp, url_prefix='/admin')
+
+    @app.route('/exports/<path:filename>')
+    @admin_required
+    def download_export_file(filename):
+        """エクスポートファイルを安全に配布"""
+        export_root = os.path.realpath(app.config['EXPORT_DIR'])
+        filepath = os.path.realpath(os.path.join(export_root, filename))
+        if not filepath.startswith(export_root + os.sep):
+            return '不正なファイルパスです', 400
+        if os.path.islink(os.path.join(export_root, filename)):
+            return '不正なファイルパスです', 400
+        if not os.path.isfile(filepath):
+            return 'ファイルが存在しません', 404
+        return send_file(filepath, as_attachment=True, mimetype='text/csv')
     
     # コンテキストプロセッサーの設定
     setup_context_processors(app)
@@ -91,13 +114,12 @@ def setup_logging(app):
 
 def setup_database(app):
     """データベース設定"""
-    DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'database', 'kintai.db')
     app.config['DB_PATH'] = DB_PATH
     
     def get_db():
         db = getattr(g, '_database', None)
         if db is None:
-            db = g._database = sqlite3.connect(DB_PATH, timeout=10)
+            db = g._database = sqlite3.connect(app.config['DB_PATH'], timeout=10)
             db.row_factory = sqlite3.Row
         return db
     
@@ -108,6 +130,23 @@ def setup_database(app):
     
     app.teardown_appcontext(close_db)
     app.get_db = get_db
+
+
+def initialize_database(db_path: str | None = None):
+    """データベースを初期化"""
+    global DB_PATH, EXPORT_DIR
+    path = db_path or DB_PATH
+    DB_PATH = path
+    app.config['DB_PATH'] = path
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    os.makedirs(EXPORT_DIR, exist_ok=True)
+    app.config['EXPORT_DIR'] = EXPORT_DIR
+    schema_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'database', 'schema.sql')
+    conn = sqlite3.connect(path)
+    with open(schema_path, encoding='utf-8') as f:
+        conn.executescript(f.read())
+    conn.commit()
+    conn.close()
 
 def setup_request_handlers(app):
     """リクエストハンドラー設定"""
@@ -126,6 +165,15 @@ def setup_request_handlers(app):
                 f"Request end: {request.method} {request.path} - Status: {response.status_code} - Duration: {duration:.4f}s"
             )
         return response
+
+
+def register_error_handlers(app):
+    """アプリケーションのエラーハンドラーを登録"""
+    from werkzeug.exceptions import RequestEntityTooLarge
+
+    @app.errorhandler(RequestEntityTooLarge)
+    def handle_file_too_large(e):
+        return "File too large", 413
 
 def setup_jinja2(app):
     """Jinja2環境の設定"""
@@ -154,3 +202,31 @@ def setup_context_processors(app):
         )
         result = c.fetchone()
         return {'unread_count': result[0] if result else 0}
+
+
+# 互換性のためのグローバルオブジェクトと関数を公開
+app = create_app()
+
+# テスト用に関数を公開
+# (旧API互換のためにモジュールレベルで公開)
+
+from .auth import check_csrf, login_required, admin_required, superadmin_required
+from .utils.validators import is_valid_email, is_valid_time
+from .utils.datetime_helpers import calculate_overtime
+from .utils.csv_helpers import generate_csv
+
+__all__ = [
+    "app",
+    "create_app",
+    "initialize_database",
+    "check_csrf",
+    "login_required",
+    "admin_required",
+    "superadmin_required",
+    "is_valid_email",
+    "is_valid_time",
+    "calculate_overtime",
+    "generate_csv",
+    "DB_PATH",
+    "EXPORT_DIR",
+]
