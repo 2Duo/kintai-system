@@ -339,11 +339,13 @@ def export():
         except Exception as e:
             flash("エクスポートに失敗しました", "danger")
     
-    # 全ユーザー一覧を取得（管理者もスーパー管理者も全ユーザーを表示）
+    # ユーザー一覧を取得
     try:
-        users = User.get_all()
+        if session.get('is_superadmin'):
+            users = User.get_all()
+        else:
+            users = User.get_managed_users(session['user_id'])
         user_list = [(u['id'], u['name']) for u in users]
-        from datetime import datetime
         now = datetime.now()
         # 年の選択肢を生成（過去5年から来年まで）
         years = list(range(now.year - 5, now.year + 2))

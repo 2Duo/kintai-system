@@ -11,7 +11,7 @@
 
 <form method="POST">
   <!-- CSRFトークン追加 -->
-  <input type="hidden" name="_csrf_token" value="{{ session._csrf_token or '' }}">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
   {% if request.args.get('embedded') %}
   <input type="hidden" name="embedded" value="1">
   {% endif %}
