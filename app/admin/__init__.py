@@ -273,7 +273,7 @@ def export():
             return render_template('export.html')
         
         try:
-            if export_type == 'single':
+            if export_type == 'single_user':
                 # 単一ユーザーエクスポート
                 user_id = int(request.form['user_id'])
                 user = User.get_by_id(user_id)
@@ -302,7 +302,7 @@ def export():
                     else:
                         flash("CSVファイルの生成に失敗しました", "danger")
             
-            elif export_type == 'bulk':
+            elif export_type == 'bulk_all':
                 # 一括エクスポート
                 admin_id = session['user_id']
                 
@@ -339,14 +339,17 @@ def export():
         except Exception as e:
             flash("エクスポートに失敗しました", "danger")
     
-    # 全ユーザー一覧を取得（管理者もスーパー管理者も全ユーザーを表示）
+    # ユーザー一覧を取得
     try:
-        users = User.get_all()
-        from datetime import datetime
+        if session.get('is_superadmin'):
+            users = User.get_all()
+        else:
+            users = User.get_managed_users(session['user_id'])
+        user_list = [(u['id'], u['name']) for u in users]
         now = datetime.now()
         # 年の選択肢を生成（過去5年から来年まで）
         years = list(range(now.year - 5, now.year + 2))
-        return render_template('export.html', user_list=users, now=now, years=years)
+        return render_template('export.html', user_list=user_list, now=now, years=years)
     except Exception as e:
         print(f"Export page error: {e}")
         import traceback
